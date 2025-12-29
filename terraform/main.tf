@@ -150,153 +150,6 @@ module "cloudfront" {
 }
 
 # =============================================================================
-# Helm Releases - Monitoring Stack
-# =============================================================================
-
-# Install Prometheus + Grafana Stack
-resource "helm_release" "kube_prometheus_stack" {
-  name             = "monitoring"
-  repository       = "https://prometheus-community.github.io/helm-charts"
-  chart            = "kube-prometheus-stack"
-  namespace        = "monitoring"
-  create_namespace = true
-  version          = "55.5.0"
-
-  values = [
-    <<-EOF
-    prometheus:
-      prometheusSpec:
-        retention: 30d
-        resources:
-          requests:
-            cpu: 500m
-            memory: 2Gi
-          limits:
-            cpu: 1000m
-            memory: 4Gi
-        storageSpec:
-          volumeClaimTemplate:
-            spec:
-              accessModes: ["ReadWriteOnce"]
-              resources:
-                requests:
-                  storage: 50Gi
-
-    grafana:
-      adminPassword: "${random_password.grafana_password.result}"
-      persistence:
-        enabled: true
-        size: 10Gi
-      ingress:
-        enabled: true
-        annotations:
-          kubernetes.io/ingress.class: alb
-          alb.ingress.kubernetes.io/scheme: internal
-        hosts:
-          - grafana.${var.domain_name}
-
-    alertmanager:
-      enabled: true
-      config:
-        global:
-          resolve_timeout: 5m
-        route:
-          group_by: ['alertname', 'namespace']
-          group_wait: 30s
-          group_interval: 5m
-          repeat_interval: 4h
-          receiver: 'default-receiver'
-        receivers:
-          - name: 'default-receiver'
-    EOF
-  ]
-
-  depends_on = [module.eks]
-}
-
-# Install Loki for logs
-resource "helm_release" "loki" {
-  name             = "loki"
-  repository       = "https://grafana.github.io/helm-charts"
-  chart            = "loki-stack"
-  namespace        = "monitoring"
-  create_namespace = true
-  version          = "2.10.0"
-
-  values = [
-    <<-EOF
-    loki:
-      persistence:
-        enabled: true
-        size: 50Gi
-    promtail:
-      enabled: true
-    grafana:
-      enabled: false
-    EOF
-  ]
-
-  depends_on = [module.eks]
-}
-
-# Install NGINX Ingress Controller
-resource "helm_release" "nginx_ingress" {
-  name             = "nginx-ingress"
-  repository       = "https://kubernetes.github.io/ingress-nginx"
-  chart            = "ingress-nginx"
-  namespace        = "ingress-nginx"
-  create_namespace = true
-  version          = "4.9.0"
-
-  values = [
-    <<-EOF
-    controller:
-      replicaCount: 2
-      service:
-        type: LoadBalancer
-        annotations:
-          service.beta.kubernetes.io/aws-load-balancer-type: nlb
-          service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
-      resources:
-        requests:
-          cpu: 100m
-          memory: 128Mi
-        limits:
-          cpu: 500m
-          memory: 512Mi
-    EOF
-  ]
-
-  depends_on = [module.eks]
-}
-
-# Install Cert Manager for SSL
-resource "helm_release" "cert_manager" {
-  name             = "cert-manager"
-  repository       = "https://charts.jetstack.io"
-  chart            = "cert-manager"
-  namespace        = "cert-manager"
-  create_namespace = true
-  version          = "1.14.0"
-
-  set {
-    name  = "installCRDs"
-    value = "true"
-  }
-
-  depends_on = [module.eks]
-}
-
-# =============================================================================
-# Random Passwords
-# =============================================================================
-
-resource "random_password" "grafana_password" {
-  length  = 16
-  special = true
-}
-
-# =============================================================================
 # Jenkins Module (CI/CD Server)
 # =============================================================================
 
@@ -348,3 +201,24 @@ resource "kubernetes_namespace" "databases" {
 
   depends_on = [module.eks]
 }
+
+# =============================================================================
+# NOTE: Helm releases (Prometheus, Loki, Nginx Ingress, Cert Manager)
+# removed from Terraform due to timeout issues.
+# Install manually after infrastructure is ready:
+#
+# helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+# helm repo add grafana https://grafana.github.io/helm-charts
+# helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+# helm repo add jetstack https://charts.jetstack.io
+# helm repo update
+#
+# kubectl create namespace monitoring
+# kubectl create namespace ingress-nginx
+# kubectl create namespace cert-manager
+#
+# helm install nginx-ingress ingress-nginx/ingress-nginx -n ingress-nginx
+# helm install cert-manager jetstack/cert-manager -n cert-manager --set installCRDs=true
+# helm install loki grafana/loki-stack -n monitoring
+# helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring
+# =============================================================================
