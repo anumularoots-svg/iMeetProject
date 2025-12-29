@@ -54,6 +54,7 @@ s3_assets_bucket_name     = "imeetpro-lancieretech-assets"
 # Leave empty first, create cert, then update and run terraform again
 # =============================================================================
 certificate_arn = "arn:aws:acm:ap-south-1:664418964913:certificate/5caa78f0-9588-461c-bd64-4163cdf7c3b7"
+cloudfront_certificate_arn = "arn:aws:acm:us-east-1:664418964913:certificate/8d3d9d2d-33f3-4563-bd07-453e0dbf68b8"
 # Example: "arn:aws:acm:ap-south-1:123456789012:certificate/abc-123-xyz"
 
 # Tags
