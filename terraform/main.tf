@@ -143,9 +143,7 @@ module "cloudfront" {
 
   name_prefix     = local.name_prefix
   domain_name     = var.domain_name
-  certificate_arn = var.certificate_arn
   s3_assets_bucket_regional_domain_name = module.s3.assets_bucket_regional_domain_name
-  s3_assets_bucket_id = module.s3.assets_bucket_id
   
   tags = local.common_tags
 
