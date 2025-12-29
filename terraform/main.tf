@@ -236,7 +236,7 @@ resource "helm_release" "loki" {
     EOF
   ]
 
-  depends_on = [module.eks, helm_release.kube_prometheus_stack]
+  depends_on = [module.eks]
 }
 
 # Install NGINX Ingress Controller
