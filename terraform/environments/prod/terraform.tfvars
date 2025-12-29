@@ -35,7 +35,7 @@ rds_username          = "imeetpro_admin"
 # =============================================================================
 # ⚠️ STEP 2A: SET STRONG PASSWORD (32+ characters recommended)
 # =============================================================================
-rds_password = "YourSuperSecurePassword123!@#$%"
+rds_password = "LanciereTech2024$ecure!@#Pass"
 # Generate strong password: openssl rand -base64 32
 
 # =============================================================================
@@ -53,7 +53,7 @@ s3_assets_bucket_name     = "imeetpro-lancieretech-assets"
 # ⚠️ STEP 3: ACM CERTIFICATE ARN (create in Step 3, then paste here)
 # Leave empty first, create cert, then update and run terraform again
 # =============================================================================
-certificate_arn = ""
+certificate_arn = "arn:aws:acm:ap-south-1:664418964913:certificate/5caa78f0-9588-461c-bd64-4163cdf7c3b7"
 # Example: "arn:aws:acm:ap-south-1:123456789012:certificate/abc-123-xyz"
 
 # Tags
