@@ -100,11 +100,11 @@ output "cloudfront_domain_name" {
 }
 
 # Monitoring Outputs
-output "grafana_password" {
-  description = "Grafana admin password"
-  value       = random_password.grafana_password.result
-  sensitive   = true
-}
+# output "grafana_password" {
+#  description = "Grafana admin password"
+ # value       = random_password.grafana_password.result
+#  sensitive   = true
+#}
 
 # Kubeconfig Command
 output "configure_kubectl" {
