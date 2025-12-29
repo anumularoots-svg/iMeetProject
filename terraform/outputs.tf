@@ -96,7 +96,7 @@ output "cloudfront_distribution_id" {
 
 output "cloudfront_domain_name" {
   description = "CloudFront domain name"
-  value       = module.cloudfront.domain_name
+  value       = module.cloudfront.distribution_domain_name
 }
 
 # Monitoring Outputs
