@@ -5,6 +5,7 @@
 resource "aws_security_group" "bastion" {
   name        = "${var.name_prefix}-bastion-sg"
   description = "Security group for bastion host"
+  vpc_id      = var.vpc_id
 
   ingress {
     description = "SSH"
