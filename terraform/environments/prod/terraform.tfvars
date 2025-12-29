@@ -35,7 +35,7 @@ rds_username          = "imeetpro_admin"
 # =============================================================================
 # ⚠️ STEP 2A: SET STRONG PASSWORD (32+ characters recommended)
 # =============================================================================
-rds_password = "LanciereTech2024$ecure!@#Pass"
+rds_password = "LanciereTech2024SecurePass123"
 # Generate strong password: openssl rand -base64 32
 
 # =============================================================================
