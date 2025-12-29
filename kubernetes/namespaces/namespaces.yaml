@@ -1,0 +1,176 @@
+# =============================================================================
+# iMeetPro Namespaces
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: imeetpro
+  labels:
+    name: imeetpro
+    istio-injection: disabled
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: databases
+  labels:
+    name: databases
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-nginx
+  labels:
+    name: ingress-nginx
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    name: cert-manager
+
+---
+# =============================================================================
+# Service Accounts
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: imeetpro-sa
+  namespace: imeetpro
+  annotations:
+    # For IRSA (IAM Roles for Service Accounts)
+    eks.amazonaws.com/role-arn: arn:aws:iam::YOUR_ACCOUNT_ID:role/imeetpro-prod-eks-sa-role
+
+---
+# RBAC for Service Account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: imeetpro-role
+  namespace: imeetpro
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: imeetpro-role-binding
+  namespace: imeetpro
+subjects:
+  - kind: ServiceAccount
+    name: imeetpro-sa
+    namespace: imeetpro
+roleRef:
+  kind: Role
+  name: imeetpro-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Jenkins Service Account (for CI/CD)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins
+  namespace: imeetpro
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jenkins-cluster-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/exec", "pods/log", "services", "secrets", "configmaps", "persistentvolumeclaims"]
+    verbs: ["*"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "replicasets"]
+    verbs: ["*"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["*"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["*"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-cluster-role-binding
+subjects:
+  - kind: ServiceAccount
+    name: jenkins
+    namespace: imeetpro
+roleRef:
+  kind: ClusterRole
+  name: jenkins-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Network Policies
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: imeetpro
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-nginx
+  namespace: imeetpro
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-internal
+  namespace: imeetpro
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: imeetpro
+        - namespaceSelector:
+            matchLabels:
+              name: databases
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring

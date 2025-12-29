@@ -1,0 +1,94 @@
+# =============================================================================
+# iMeetPro GPU Worker - Dockerfile
+# For video recording, face authentication, AI processing
+# =============================================================================
+
+FROM nvidia/cuda:12.2-runtime-ubuntu22.04
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    APP_HOME=/app
+
+WORKDIR $APP_HOME
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    build-essential \
+    libpq-dev \
+    curl \
+    wget \
+    git \
+    # FFmpeg for video processing
+    ffmpeg \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    # OpenCV dependencies
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libglib2.0-0 \
+    # Face recognition dependencies
+    cmake \
+    libboost-all-dev \
+    libopenblas-dev \
+    liblapack-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create symlink for python
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python
+
+# Create non-root user
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+
+# Install Python dependencies
+COPY requirements-gpu.txt .
+RUN pip install --no-cache-dir -r requirements-gpu.txt
+
+# Install additional GPU packages
+RUN pip install --no-cache-dir \
+    torch \
+    torchvision \
+    torchaudio \
+    opencv-python-headless \
+    face_recognition \
+    deepface \
+    insightface \
+    onnxruntime-gpu \
+    faster-whisper
+
+# Copy application code
+COPY --chown=appuser:appgroup . .
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/models /app/temp && \
+    chown -R appuser:appgroup /app
+
+# Download pre-trained models (optional)
+# RUN python download_models.py
+
+# Add build info
+ARG BUILD_DATE
+ARG VERSION
+LABEL org.opencontainers.image.created=$BUILD_DATE
+LABEL org.opencontainers.image.version=$VERSION
+LABEL org.opencontainers.image.title="iMeetPro GPU Worker"
+LABEL org.opencontainers.image.description="GPU Worker for video processing and AI"
+
+# Switch to non-root user
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python healthcheck.py || exit 1
+
+# Expose port for gRPC (if needed)
+EXPOSE 50051
+
+# Start GPU worker
+CMD ["python", "gpu_worker.py"]

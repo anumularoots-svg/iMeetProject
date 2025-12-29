@@ -1,0 +1,200 @@
+# =============================================================================
+# iMeetPro GPU Worker - Kubernetes Deployment
+# For video recording, face authentication, AI processing
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-worker
+  namespace: imeetpro
+  labels:
+    app: gpu-worker
+    tier: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gpu-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: gpu-worker
+        tier: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: imeetpro-sa
+      # Tolerate GPU node taints
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      # Schedule on GPU nodes
+      nodeSelector:
+        role: gpu
+      containers:
+        - name: gpu-worker
+          image: ${ECR_REGISTRY}/imeetpro/gpu-worker:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 50051
+              name: grpc
+          envFrom:
+            - configMapRef:
+                name: gpu-worker-config
+            - secretRef:
+                name: backend-secrets
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "4Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4000m"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: models
+              mountPath: /app/models
+            - name: temp
+              mountPath: /app/temp
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: gpu-worker-models-pvc
+        - name: temp
+          emptyDir: {}
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-worker-config
+  namespace: imeetpro
+data:
+  # Redis for task queue
+  REDIS_HOST: "redis.databases.svc.cluster.local"
+  REDIS_PORT: "6379"
+  
+  # MongoDB for storing results
+  MONGODB_HOST: "mongodb.databases.svc.cluster.local"
+  MONGODB_PORT: "27017"
+  MONGODB_DATABASE: "imeetpro"
+  
+  # S3 for storing recordings
+  AWS_S3_BUCKET: "imeetpro-prod-recordings"
+  AWS_REGION: "ap-south-1"
+  
+  # LiveKit for getting meeting streams
+  LIVEKIT_URL: "wss://imeetpro-fbrcr2mk.livekit.cloud"
+  
+  # GPU Settings
+  CUDA_VISIBLE_DEVICES: "0"
+  TF_FORCE_GPU_ALLOW_GROWTH: "true"
+  
+  # Face Recognition Settings
+  FACE_RECOGNITION_MODEL: "large"
+  FACE_DETECTION_CONFIDENCE: "0.6"
+  
+  # Video Processing Settings
+  VIDEO_FPS: "30"
+  VIDEO_QUALITY: "high"
+  
+  # Whisper Settings (for captions)
+  WHISPER_MODEL: "large-v2"
+  WHISPER_LANGUAGE: "auto"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-worker
+  namespace: imeetpro
+  labels:
+    app: gpu-worker
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+    - port: 50051
+      targetPort: 50051
+      protocol: TCP
+      name: grpc
+  selector:
+    app: gpu-worker
+
+---
+# PVC for storing AI models
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gpu-worker-models-pvc
+  namespace: imeetpro
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gpu-worker-hpa
+  namespace: imeetpro
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gpu-worker
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70

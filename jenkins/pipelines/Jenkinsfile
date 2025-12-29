@@ -1,0 +1,641 @@
+// =============================================================================
+// iMeetPro CI/CD Pipeline - Main Jenkinsfile
+// =============================================================================
+// Pipeline Stages:
+// 1. Checkout - Pull code from GitHub
+// 2. Code Quality - SonarQube scan
+// 3. Security Scan - Trivy vulnerability scan
+// 4. Build - Docker build for all services
+// 5. Push - Push images to ECR
+// 6. Deploy - Deploy to EKS
+// =============================================================================
+
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+                apiVersion: v1
+                kind: Pod
+                spec:
+                  serviceAccountName: jenkins
+                  containers:
+                  - name: docker
+                    image: docker:24-dind
+                    securityContext:
+                      privileged: true
+                    volumeMounts:
+                    - name: docker-socket
+                      mountPath: /var/run/docker.sock
+                  - name: kubectl
+                    image: bitnami/kubectl:latest
+                    command:
+                    - cat
+                    tty: true
+                  - name: trivy
+                    image: aquasec/trivy:latest
+                    command:
+                    - cat
+                    tty: true
+                  - name: sonar-scanner
+                    image: sonarsource/sonar-scanner-cli:latest
+                    command:
+                    - cat
+                    tty: true
+                  volumes:
+                  - name: docker-socket
+                    hostPath:
+                      path: /var/run/docker.sock
+            '''
+        }
+    }
+
+    environment {
+        // AWS Configuration
+        AWS_REGION = 'ap-south-1'
+        AWS_ACCOUNT_ID = credentials('aws-account-id')
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        
+        // Repository names
+        FRONTEND_REPO = "${ECR_REGISTRY}/imeetpro/frontend"
+        BACKEND_REPO = "${ECR_REGISTRY}/imeetpro/backend"
+        CELERY_REPO = "${ECR_REGISTRY}/imeetpro/celery-worker"
+        GPU_WORKER_REPO = "${ECR_REGISTRY}/imeetpro/gpu-worker"
+        
+        // EKS Configuration
+        EKS_CLUSTER_NAME = 'imeetpro-prod-eks'
+        NAMESPACE = 'imeetpro'
+        
+        // SonarQube Configuration
+        SONAR_HOST_URL = credentials('sonar-host-url')
+        SONAR_TOKEN = credentials('sonar-token')
+        
+        // Image Tag
+        IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'latest'}"
+        
+        // Slack Notification
+        SLACK_CHANNEL = '#imeetpro-deployments'
+    }
+
+    options {
+        timeout(time: 60, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timestamps()
+    }
+
+    parameters {
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'staging', 'prod'],
+            description: 'Target environment for deployment'
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip test stage'
+        )
+        booleanParam(
+            name: 'SKIP_SECURITY_SCAN',
+            defaultValue: false,
+            description: 'Skip security scan stage'
+        )
+        booleanParam(
+            name: 'DEPLOY_FRONTEND',
+            defaultValue: true,
+            description: 'Deploy Frontend'
+        )
+        booleanParam(
+            name: 'DEPLOY_BACKEND',
+            defaultValue: true,
+            description: 'Deploy Backend'
+        )
+        booleanParam(
+            name: 'DEPLOY_CELERY',
+            defaultValue: true,
+            description: 'Deploy Celery Workers'
+        )
+        booleanParam(
+            name: 'DEPLOY_GPU_WORKERS',
+            defaultValue: false,
+            description: 'Deploy GPU Workers'
+        )
+    }
+
+    stages {
+        // =====================================================================
+        // Stage 1: Checkout
+        // =====================================================================
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "🔄 Checking out source code..."
+                    
+                    // Checkout main application repo
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: "*/${env.BRANCH_NAME ?: 'main'}"]],
+                        extensions: [
+                            [$class: 'CleanBeforeCheckout'],
+                            [$class: 'CloneOption', depth: 1, shallow: true]
+                        ],
+                        userRemoteConfigs: [[
+                            url: 'https://github.com/your-org/imeetpro.git',
+                            credentialsId: 'github-credentials'
+                        ]]
+                    ])
+                    
+                    // Set build description
+                    currentBuild.description = "Branch: ${env.BRANCH_NAME ?: 'main'}, Env: ${params.ENVIRONMENT}"
+                }
+            }
+        }
+
+        // =====================================================================
+        // Stage 2: Code Quality Analysis (SonarQube)
+        // =====================================================================
+        stage('Code Quality') {
+            when {
+                expression { !params.SKIP_TESTS }
+            }
+            parallel {
+                stage('Frontend Analysis') {
+                    when {
+                        expression { params.DEPLOY_FRONTEND }
+                    }
+                    steps {
+                        container('sonar-scanner') {
+                            dir('frontend') {
+                                script {
+                                    echo "🔍 Running SonarQube analysis for Frontend..."
+                                    sh '''
+                                        sonar-scanner \
+                                            -Dsonar.projectKey=imeetpro-frontend \
+                                            -Dsonar.projectName="iMeetPro Frontend" \
+                                            -Dsonar.sources=src \
+                                            -Dsonar.host.url=${SONAR_HOST_URL} \
+                                            -Dsonar.login=${SONAR_TOKEN} \
+                                            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                                    '''
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                stage('Backend Analysis') {
+                    when {
+                        expression { params.DEPLOY_BACKEND }
+                    }
+                    steps {
+                        container('sonar-scanner') {
+                            dir('backend') {
+                                script {
+                                    echo "🔍 Running SonarQube analysis for Backend..."
+                                    sh '''
+                                        sonar-scanner \
+                                            -Dsonar.projectKey=imeetpro-backend \
+                                            -Dsonar.projectName="iMeetPro Backend" \
+                                            -Dsonar.sources=. \
+                                            -Dsonar.host.url=${SONAR_HOST_URL} \
+                                            -Dsonar.login=${SONAR_TOKEN} \
+                                            -Dsonar.python.coverage.reportPaths=coverage.xml \
+                                            -Dsonar.exclusions=**/migrations/**,**/tests/**
+                                    '''
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // Stage 3: Unit Tests
+        // =====================================================================
+        stage('Unit Tests') {
+            when {
+                expression { !params.SKIP_TESTS }
+            }
+            parallel {
+                stage('Frontend Tests') {
+                    when {
+                        expression { params.DEPLOY_FRONTEND }
+                    }
+                    steps {
+                        container('docker') {
+                            dir('frontend') {
+                                script {
+                                    echo "🧪 Running Frontend tests..."
+                                    sh '''
+                                        docker build -t frontend-test --target test .
+                                        docker run --rm frontend-test npm run test:ci
+                                    '''
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                stage('Backend Tests') {
+                    when {
+                        expression { params.DEPLOY_BACKEND }
+                    }
+                    steps {
+                        container('docker') {
+                            dir('backend') {
+                                script {
+                                    echo "🧪 Running Backend tests..."
+                                    sh '''
+                                        docker build -t backend-test --target test .
+                                        docker run --rm backend-test python manage.py test
+                                    '''
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // Stage 4: Build Docker Images
+        // =====================================================================
+        stage('Build Images') {
+            parallel {
+                stage('Build Frontend') {
+                    when {
+                        expression { params.DEPLOY_FRONTEND }
+                    }
+                    steps {
+                        container('docker') {
+                            dir('frontend') {
+                                script {
+                                    echo "🏗️ Building Frontend Docker image..."
+                                    sh """
+                                        docker build \
+                                            --build-arg BUILD_DATE=\$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+                                            --build-arg VERSION=${IMAGE_TAG} \
+                                            --build-arg REACT_APP_API_URL=https://api.imeetpro.com \
+                                            --build-arg REACT_APP_LIVEKIT_URL=wss://imeetpro-fbrcr2mk.livekit.cloud \
+                                            -t ${FRONTEND_REPO}:${IMAGE_TAG} \
+                                            -t ${FRONTEND_REPO}:latest \
+                                            -f Dockerfile .
+                                    """
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                stage('Build Backend') {
+                    when {
+                        expression { params.DEPLOY_BACKEND }
+                    }
+                    steps {
+                        container('docker') {
+                            dir('backend') {
+                                script {
+                                    echo "🏗️ Building Backend Docker image..."
+                                    sh """
+                                        docker build \
+                                            --build-arg BUILD_DATE=\$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+                                            --build-arg VERSION=${IMAGE_TAG} \
+                                            -t ${BACKEND_REPO}:${IMAGE_TAG} \
+                                            -t ${BACKEND_REPO}:latest \
+                                            -f Dockerfile .
+                                    """
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                stage('Build Celery') {
+                    when {
+                        expression { params.DEPLOY_CELERY }
+                    }
+                    steps {
+                        container('docker') {
+                            dir('backend') {
+                                script {
+                                    echo "🏗️ Building Celery Worker Docker image..."
+                                    sh """
+                                        docker build \
+                                            --build-arg BUILD_DATE=\$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+                                            --build-arg VERSION=${IMAGE_TAG} \
+                                            -t ${CELERY_REPO}:${IMAGE_TAG} \
+                                            -t ${CELERY_REPO}:latest \
+                                            -f Dockerfile.celery .
+                                    """
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                stage('Build GPU Worker') {
+                    when {
+                        expression { params.DEPLOY_GPU_WORKERS }
+                    }
+                    steps {
+                        container('docker') {
+                            dir('gpu-worker') {
+                                script {
+                                    echo "🏗️ Building GPU Worker Docker image..."
+                                    sh """
+                                        docker build \
+                                            --build-arg BUILD_DATE=\$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+                                            --build-arg VERSION=${IMAGE_TAG} \
+                                            -t ${GPU_WORKER_REPO}:${IMAGE_TAG} \
+                                            -t ${GPU_WORKER_REPO}:latest \
+                                            -f Dockerfile .
+                                    """
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // Stage 5: Security Scan (Trivy)
+        // =====================================================================
+        stage('Security Scan') {
+            when {
+                expression { !params.SKIP_SECURITY_SCAN }
+            }
+            parallel {
+                stage('Scan Frontend') {
+                    when {
+                        expression { params.DEPLOY_FRONTEND }
+                    }
+                    steps {
+                        container('trivy') {
+                            script {
+                                echo "🔒 Scanning Frontend image for vulnerabilities..."
+                                sh """
+                                    trivy image \
+                                        --severity HIGH,CRITICAL \
+                                        --exit-code 0 \
+                                        --format table \
+                                        ${FRONTEND_REPO}:${IMAGE_TAG}
+                                    
+                                    trivy image \
+                                        --severity HIGH,CRITICAL \
+                                        --format json \
+                                        -o trivy-frontend-report.json \
+                                        ${FRONTEND_REPO}:${IMAGE_TAG}
+                                """
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'trivy-frontend-report.json', allowEmptyArchive: true
+                        }
+                    }
+                }
+                
+                stage('Scan Backend') {
+                    when {
+                        expression { params.DEPLOY_BACKEND }
+                    }
+                    steps {
+                        container('trivy') {
+                            script {
+                                echo "🔒 Scanning Backend image for vulnerabilities..."
+                                sh """
+                                    trivy image \
+                                        --severity HIGH,CRITICAL \
+                                        --exit-code 0 \
+                                        --format table \
+                                        ${BACKEND_REPO}:${IMAGE_TAG}
+                                    
+                                    trivy image \
+                                        --severity HIGH,CRITICAL \
+                                        --format json \
+                                        -o trivy-backend-report.json \
+                                        ${BACKEND_REPO}:${IMAGE_TAG}
+                                """
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'trivy-backend-report.json', allowEmptyArchive: true
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // Stage 6: Push to ECR
+        // =====================================================================
+        stage('Push to ECR') {
+            steps {
+                container('docker') {
+                    script {
+                        echo "📤 Pushing images to ECR..."
+                        
+                        // Login to ECR
+                        sh """
+                            aws ecr get-login-password --region ${AWS_REGION} | \
+                            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        """
+                        
+                        // Push Frontend
+                        if (params.DEPLOY_FRONTEND) {
+                            sh """
+                                docker push ${FRONTEND_REPO}:${IMAGE_TAG}
+                                docker push ${FRONTEND_REPO}:latest
+                            """
+                        }
+                        
+                        // Push Backend
+                        if (params.DEPLOY_BACKEND) {
+                            sh """
+                                docker push ${BACKEND_REPO}:${IMAGE_TAG}
+                                docker push ${BACKEND_REPO}:latest
+                            """
+                        }
+                        
+                        // Push Celery
+                        if (params.DEPLOY_CELERY) {
+                            sh """
+                                docker push ${CELERY_REPO}:${IMAGE_TAG}
+                                docker push ${CELERY_REPO}:latest
+                            """
+                        }
+                        
+                        // Push GPU Worker
+                        if (params.DEPLOY_GPU_WORKERS) {
+                            sh """
+                                docker push ${GPU_WORKER_REPO}:${IMAGE_TAG}
+                                docker push ${GPU_WORKER_REPO}:latest
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // Stage 7: Deploy to EKS
+        // =====================================================================
+        stage('Deploy to EKS') {
+            steps {
+                container('kubectl') {
+                    script {
+                        echo "🚀 Deploying to EKS..."
+                        
+                        // Configure kubectl
+                        sh """
+                            aws eks update-kubeconfig \
+                                --region ${AWS_REGION} \
+                                --name ${EKS_CLUSTER_NAME}
+                        """
+                        
+                        // Deploy Frontend
+                        if (params.DEPLOY_FRONTEND) {
+                            echo "Deploying Frontend..."
+                            sh """
+                                kubectl set image deployment/frontend \
+                                    frontend=${FRONTEND_REPO}:${IMAGE_TAG} \
+                                    -n ${NAMESPACE}
+                                
+                                kubectl rollout status deployment/frontend \
+                                    -n ${NAMESPACE} \
+                                    --timeout=300s
+                            """
+                        }
+                        
+                        // Deploy Backend
+                        if (params.DEPLOY_BACKEND) {
+                            echo "Deploying Backend..."
+                            sh """
+                                kubectl set image deployment/backend \
+                                    backend=${BACKEND_REPO}:${IMAGE_TAG} \
+                                    -n ${NAMESPACE}
+                                
+                                kubectl rollout status deployment/backend \
+                                    -n ${NAMESPACE} \
+                                    --timeout=300s
+                            """
+                        }
+                        
+                        // Deploy Celery Workers
+                        if (params.DEPLOY_CELERY) {
+                            echo "Deploying Celery Workers..."
+                            sh """
+                                kubectl set image deployment/celery-worker \
+                                    celery-worker=${CELERY_REPO}:${IMAGE_TAG} \
+                                    -n ${NAMESPACE}
+                                
+                                kubectl rollout status deployment/celery-worker \
+                                    -n ${NAMESPACE} \
+                                    --timeout=300s
+                            """
+                        }
+                        
+                        // Deploy GPU Workers
+                        if (params.DEPLOY_GPU_WORKERS) {
+                            echo "Deploying GPU Workers..."
+                            sh """
+                                kubectl set image deployment/gpu-worker \
+                                    gpu-worker=${GPU_WORKER_REPO}:${IMAGE_TAG} \
+                                    -n ${NAMESPACE}
+                                
+                                kubectl rollout status deployment/gpu-worker \
+                                    -n ${NAMESPACE} \
+                                    --timeout=300s
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // Stage 8: Smoke Tests
+        // =====================================================================
+        stage('Smoke Tests') {
+            steps {
+                container('kubectl') {
+                    script {
+                        echo "🧪 Running smoke tests..."
+                        
+                        // Health check endpoints
+                        sh """
+                            # Wait for services to be ready
+                            sleep 30
+                            
+                            # Test Frontend
+                            curl -sf https://imeetpro.com/health || exit 1
+                            
+                            # Test Backend API
+                            curl -sf https://api.imeetpro.com/api/health/ || exit 1
+                            
+                            echo "✅ Smoke tests passed!"
+                        """
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                echo "✅ Pipeline completed successfully!"
+                
+                // Slack notification
+                slackSend(
+                    channel: env.SLACK_CHANNEL,
+                    color: 'good',
+                    message: """
+                        ✅ *iMeetPro Deployment Successful*
+                        *Environment:* ${params.ENVIRONMENT}
+                        *Build:* #${env.BUILD_NUMBER}
+                        *Branch:* ${env.BRANCH_NAME ?: 'main'}
+                        *Image Tag:* ${IMAGE_TAG}
+                        *Duration:* ${currentBuild.durationString}
+                    """
+                )
+            }
+        }
+        
+        failure {
+            script {
+                echo "❌ Pipeline failed!"
+                
+                // Slack notification
+                slackSend(
+                    channel: env.SLACK_CHANNEL,
+                    color: 'danger',
+                    message: """
+                        ❌ *iMeetPro Deployment Failed*
+                        *Environment:* ${params.ENVIRONMENT}
+                        *Build:* #${env.BUILD_NUMBER}
+                        *Branch:* ${env.BRANCH_NAME ?: 'main'}
+                        *Duration:* ${currentBuild.durationString}
+                        *Details:* ${env.BUILD_URL}
+                    """
+                )
+            }
+        }
+        
+        always {
+            // Clean up Docker images
+            container('docker') {
+                sh '''
+                    docker system prune -f || true
+                '''
+            }
+            
+            // Archive artifacts
+            archiveArtifacts artifacts: '**/trivy-*.json', allowEmptyArchive: true
+        }
+    }
+}

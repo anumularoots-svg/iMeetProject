@@ -1,0 +1,204 @@
+# =============================================================================
+# iMeetPro Celery Worker - Kubernetes Deployment
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: imeetpro
+  labels:
+    app: celery-worker
+    tier: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+        tier: worker
+    spec:
+      serviceAccountName: imeetpro-sa
+      containers:
+        - name: celery-worker
+          image: ${ECR_REGISTRY}/imeetpro/celery-worker:latest
+          imagePullPolicy: Always
+          command: ["celery"]
+          args: ["-A", "config", "worker", "--loglevel=info", "--concurrency=4", "-Q", "default,notifications,reports"]
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: backend-secrets
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - celery -A config inspect ping -d celery@$HOSTNAME
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+---
+# Celery Beat (Scheduler)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: imeetpro
+  labels:
+    app: celery-beat
+    tier: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-beat
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+        tier: worker
+    spec:
+      serviceAccountName: imeetpro-sa
+      containers:
+        - name: celery-beat
+          image: ${ECR_REGISTRY}/imeetpro/celery-worker:latest
+          imagePullPolicy: Always
+          command: ["celery"]
+          args: ["-A", "config", "beat", "--loglevel=info", "--scheduler=django_celery_beat.schedulers:DatabaseScheduler"]
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: backend-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
+
+---
+# Celery Flower (Monitoring)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-flower
+  namespace: imeetpro
+  labels:
+    app: celery-flower
+    tier: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-flower
+  template:
+    metadata:
+      labels:
+        app: celery-flower
+        tier: monitoring
+    spec:
+      serviceAccountName: imeetpro-sa
+      containers:
+        - name: celery-flower
+          image: mher/flower:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5555
+              name: http
+          env:
+            - name: CELERY_BROKER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: CELERY_BROKER_URL
+            - name: FLOWER_BASIC_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: FLOWER_BASIC_AUTH
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 5555
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: celery-flower
+  namespace: imeetpro
+  labels:
+    app: celery-flower
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5555
+      targetPort: 5555
+      protocol: TCP
+      name: http
+  selector:
+    app: celery-flower
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: celery-worker-hpa
+  namespace: imeetpro
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: celery-worker
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

@@ -1,0 +1,202 @@
+# =============================================================================
+# iMeetPro Backend - Kubernetes Deployment
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: imeetpro
+  labels:
+    app: backend
+    tier: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: backend
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: imeetpro-sa
+      containers:
+        - name: backend
+          image: ${ECR_REGISTRY}/imeetpro/backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: backend-secrets
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health/
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - backend
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: backend
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: imeetpro
+  labels:
+    app: backend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: backend
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: imeetpro
+data:
+  DJANGO_SETTINGS_MODULE: "config.settings.production"
+  DEBUG: "False"
+  ALLOWED_HOSTS: "api.imeetpro.com,backend.imeetpro.svc.cluster.local"
+  
+  # Database
+  DB_HOST: "imeetpro-prod-mysql.xxxxxx.ap-south-1.rds.amazonaws.com"
+  DB_PORT: "3306"
+  DB_NAME: "imeetpro"
+  
+  # Redis
+  REDIS_HOST: "redis.databases.svc.cluster.local"
+  REDIS_PORT: "6379"
+  
+  # MongoDB
+  MONGODB_HOST: "mongodb.databases.svc.cluster.local"
+  MONGODB_PORT: "27017"
+  MONGODB_DATABASE: "imeetpro"
+  
+  # LiveKit
+  LIVEKIT_URL: "wss://imeetpro-fbrcr2mk.livekit.cloud"
+  
+  # S3
+  AWS_STORAGE_BUCKET_NAME: "imeetpro-prod-recordings"
+  AWS_S3_REGION_NAME: "ap-south-1"
+  
+  # Celery
+  CELERY_BROKER_URL: "redis://redis.databases.svc.cluster.local:6379/0"
+  CELERY_RESULT_BACKEND: "redis://redis.databases.svc.cluster.local:6379/1"
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: imeetpro
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 3
+  maxReplicas: 15
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: imeetpro
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: backend

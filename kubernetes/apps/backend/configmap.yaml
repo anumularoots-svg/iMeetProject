@@ -1,0 +1,47 @@
+# =============================================================================
+# iMeetPro Backend - ConfigMap
+# =============================================================================
+# ⚠️ UPDATE AFTER TERRAFORM APPLY ⚠️
+# Get values from: terraform output
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: imeetpro
+data:
+  DJANGO_SETTINGS_MODULE: "config.settings.production"
+  DEBUG: "False"
+  ALLOWED_HOSTS: "api.lancieretech.com,backend.imeetpro.svc.cluster.local"
+  
+  # ==========================================================================
+  # ⚠️ STEP 8H: RDS Database Endpoint
+  # Get from: terraform output rds_endpoint
+  # Example: imeetpro-prod-mysql.xxxx.ap-south-1.rds.amazonaws.com
+  # ==========================================================================
+  DB_HOST: "PASTE_RDS_ENDPOINT_HERE"
+  DB_PORT: "3306"
+  DB_NAME: "imeetpro"
+  
+  # Redis (internal Kubernetes DNS)
+  REDIS_HOST: "redis.databases.svc.cluster.local"
+  REDIS_PORT: "6379"
+  
+  # MongoDB (internal Kubernetes DNS)
+  MONGODB_HOST: "mongodb.databases.svc.cluster.local"
+  MONGODB_PORT: "27017"
+  MONGODB_DATABASE: "imeetpro"
+  
+  # LiveKit
+  LIVEKIT_URL: "wss://imeetpro-fbrcr2mk.livekit.cloud"
+  
+  # ==========================================================================
+  # ⚠️ STEP 8I: S3 Bucket Name
+  # From terraform.tfvars
+  # ==========================================================================
+  AWS_STORAGE_BUCKET_NAME: "imeetpro-lancieretech-recordings"
+  AWS_S3_REGION_NAME: "ap-south-1"
+  
+  # Celery
+  CELERY_BROKER_URL: "redis://:RedisSecurePass123!@#@redis.databases.svc.cluster.local:6379/0"
+  CELERY_RESULT_BACKEND: "redis://:RedisSecurePass123!@#@redis.databases.svc.cluster.local:6379/1"
