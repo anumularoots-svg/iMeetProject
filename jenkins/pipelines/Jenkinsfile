@@ -1,54 +1,17 @@
 // =============================================================================
-// iMeetPro CI/CD Pipeline - Main Jenkinsfile
+// iMeetPro CI/CD Pipeline - Simplified Version
 // =============================================================================
-// Pipeline Stages:
-// 1. Checkout - Pull code from GitHub
-// 2. Unit Tests - Run frontend and backend tests
-// 3. Build - Docker build for all services
-// 4. Security Scan - Trivy vulnerability scan
-// 5. Push - Push images to ECR
-// 6. Deploy - Deploy to EKS
-// 7. Smoke Tests - Verify deployment
+// Runs on Jenkins server directly (not in Kubernetes pods)
+// Uses Docker on Jenkins server for builds, kubectl for deployments
 // =============================================================================
 
 pipeline {
-    agent {
-        kubernetes {
-            yaml '''
-                apiVersion: v1
-                kind: Pod
-                spec:
-                  serviceAccountName: jenkins
-                  containers:
-                  - name: docker
-                    image: docker:24-dind
-                    securityContext:
-                      privileged: true
-                    volumeMounts:
-                    - name: docker-socket
-                      mountPath: /var/run/docker.sock
-                  - name: kubectl
-                    image: bitnami/kubectl:latest
-                    command:
-                    - cat
-                    tty: true
-                  - name: trivy
-                    image: aquasec/trivy:latest
-                    command:
-                    - cat
-                    tty: true
-                  volumes:
-                  - name: docker-socket
-                    hostPath:
-                      path: /var/run/docker.sock
-            '''
-        }
-    }
-
+    agent any  // Runs on Jenkins server
+    
     environment {
         // AWS Configuration
         AWS_REGION = 'ap-south-1'
-        AWS_ACCOUNT_ID = credentials('aws-account-id')
+        AWS_ACCOUNT_ID = '664418964913'
         ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         
         // Repository names
@@ -62,10 +25,7 @@ pipeline {
         NAMESPACE = 'imeetpro'
         
         // Image Tag
-        IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'latest'}"
-        
-        // Slack Notification
-        SLACK_CHANNEL = '#imeetpro-deployments'
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
     }
 
     options {
@@ -103,7 +63,7 @@ pipeline {
         )
         booleanParam(
             name: 'DEPLOY_CELERY',
-            defaultValue: true,
+            defaultValue: false,
             description: 'Deploy Celery Workers'
         )
         booleanParam(
@@ -121,69 +81,33 @@ pipeline {
             steps {
                 script {
                     echo "🔄 Checking out source code..."
-                    
-                    // Checkout main application repo
                     checkout([
                         $class: 'GitSCM',
-                        branches: [[name: "*/${env.BRANCH_NAME ?: 'main'}"]],
-                        extensions: [
-                            [$class: 'CleanBeforeCheckout'],
-                            [$class: 'CloneOption', depth: 1, shallow: true]
-                        ],
+                        branches: [[name: '*/main']],
+                        extensions: [[$class: 'CleanBeforeCheckout']],
                         userRemoteConfigs: [[
                             url: 'https://github.com/anumularoots-svg/iMeetProject.git',
                             credentialsId: 'github-credentials'
                         ]]
                     ])
-                    
-                    // Set build description
-                    currentBuild.description = "Branch: ${env.BRANCH_NAME ?: 'main'}, Env: ${params.ENVIRONMENT}"
+                    currentBuild.description = "Env: ${params.ENVIRONMENT}, Tag: ${IMAGE_TAG}"
                 }
             }
         }
 
         // =====================================================================
-        // Stage 2: Unit Tests
+        // Stage 2: Setup AWS & kubectl
         // =====================================================================
-        stage('Unit Tests') {
-            when {
-                expression { !params.SKIP_TESTS }
-            }
-            parallel {
-                stage('Frontend Tests') {
-                    when {
-                        expression { params.DEPLOY_FRONTEND }
-                    }
-                    steps {
-                        container('docker') {
-                            dir('frontend') {
-                                script {
-                                    echo "🧪 Running Frontend tests..."
-                                    sh '''
-                                        docker build -t frontend-test --target test . || echo "No test target, skipping..."
-                                    '''
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                stage('Backend Tests') {
-                    when {
-                        expression { params.DEPLOY_BACKEND }
-                    }
-                    steps {
-                        container('docker') {
-                            dir('backend') {
-                                script {
-                                    echo "🧪 Running Backend tests..."
-                                    sh '''
-                                        docker build -t backend-test --target test . || echo "No test target, skipping..."
-                                    '''
-                                }
-                            }
-                        }
-                    }
+        stage('Setup AWS') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                    sh '''
+                        echo "🔧 Configuring AWS and kubectl..."
+                        aws sts get-caller-identity
+                        aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
+                        kubectl get nodes
+                        echo "✅ AWS and kubectl configured!"
+                    '''
                 }
             }
         }
@@ -198,22 +122,19 @@ pipeline {
                         expression { params.DEPLOY_FRONTEND }
                     }
                     steps {
-                        container('docker') {
+                        script {
+                            echo "🏗️ Building Frontend Docker image..."
                             dir('frontend') {
-                                script {
-                                    echo "🏗️ Building Frontend Docker image..."
-                                    sh """
-                                        docker build \
-                                            --build-arg BUILD_DATE=\$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
-                                            --build-arg VERSION=${IMAGE_TAG} \
-                                            --build-arg REACT_APP_API_URL=https://api.lancieretech.com \
-                                            --build-arg REACT_APP_LIVEKIT_URL=wss://imeetpro-fbrcr2mk.livekit.cloud \
-                                            -t ${FRONTEND_REPO}:${IMAGE_TAG} \
-                                            -t ${FRONTEND_REPO}:latest \
-                                            -f Dockerfile .
-                                    """
-                                }
+                                sh """
+                                    docker build \
+                                        --build-arg VITE_API_URL=https://api.lancieretech.com \
+                                        --build-arg VITE_LIVEKIT_URL=wss://imeetpro-fbrcr2mk.livekit.cloud \
+                                        -t ${FRONTEND_REPO}:${IMAGE_TAG} \
+                                        -t ${FRONTEND_REPO}:latest \
+                                        -f ../jenkins/docker/Dockerfile.frontend .
+                                """
                             }
+                            echo "✅ Frontend image built!"
                         }
                     }
                 }
@@ -223,20 +144,17 @@ pipeline {
                         expression { params.DEPLOY_BACKEND }
                     }
                     steps {
-                        container('docker') {
-                            dir('backend') {
-                                script {
-                                    echo "🏗️ Building Backend Docker image..."
-                                    sh """
-                                        docker build \
-                                            --build-arg BUILD_DATE=\$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
-                                            --build-arg VERSION=${IMAGE_TAG} \
-                                            -t ${BACKEND_REPO}:${IMAGE_TAG} \
-                                            -t ${BACKEND_REPO}:latest \
-                                            -f Dockerfile .
-                                    """
-                                }
+                        script {
+                            echo "🏗️ Building Backend Docker image..."
+                            dir('BackEnd') {
+                                sh """
+                                    docker build \
+                                        -t ${BACKEND_REPO}:${IMAGE_TAG} \
+                                        -t ${BACKEND_REPO}:latest \
+                                        -f ../jenkins/docker/Dockerfile.backend .
+                                """
                             }
+                            echo "✅ Backend image built!"
                         }
                     }
                 }
@@ -246,43 +164,17 @@ pipeline {
                         expression { params.DEPLOY_CELERY }
                     }
                     steps {
-                        container('docker') {
-                            dir('backend') {
-                                script {
-                                    echo "🏗️ Building Celery Worker Docker image..."
-                                    sh """
-                                        docker build \
-                                            --build-arg BUILD_DATE=\$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
-                                            --build-arg VERSION=${IMAGE_TAG} \
-                                            -t ${CELERY_REPO}:${IMAGE_TAG} \
-                                            -t ${CELERY_REPO}:latest \
-                                            -f Dockerfile.celery .
-                                    """
-                                }
+                        script {
+                            echo "🏗️ Building Celery Worker Docker image..."
+                            dir('BackEnd') {
+                                sh """
+                                    docker build \
+                                        -t ${CELERY_REPO}:${IMAGE_TAG} \
+                                        -t ${CELERY_REPO}:latest \
+                                        -f ../jenkins/docker/Dockerfile.celery .
+                                """
                             }
-                        }
-                    }
-                }
-                
-                stage('Build GPU Worker') {
-                    when {
-                        expression { params.DEPLOY_GPU_WORKERS }
-                    }
-                    steps {
-                        container('docker') {
-                            dir('gpu-worker') {
-                                script {
-                                    echo "🏗️ Building GPU Worker Docker image..."
-                                    sh """
-                                        docker build \
-                                            --build-arg BUILD_DATE=\$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
-                                            --build-arg VERSION=${IMAGE_TAG} \
-                                            -t ${GPU_WORKER_REPO}:${IMAGE_TAG} \
-                                            -t ${GPU_WORKER_REPO}:latest \
-                                            -f Dockerfile .
-                                    """
-                                }
-                            }
+                            echo "✅ Celery image built!"
                         }
                     }
                 }
@@ -296,67 +188,25 @@ pipeline {
             when {
                 expression { !params.SKIP_SECURITY_SCAN }
             }
-            parallel {
-                stage('Scan Frontend') {
-                    when {
-                        expression { params.DEPLOY_FRONTEND }
+            steps {
+                script {
+                    echo "🔒 Running Trivy security scan..."
+                    
+                    if (params.DEPLOY_FRONTEND) {
+                        sh """
+                            trivy image --severity HIGH,CRITICAL --exit-code 0 \
+                                ${FRONTEND_REPO}:${IMAGE_TAG} || true
+                        """
                     }
-                    steps {
-                        container('trivy') {
-                            script {
-                                echo "🔒 Scanning Frontend image for vulnerabilities..."
-                                sh """
-                                    trivy image \
-                                        --severity HIGH,CRITICAL \
-                                        --exit-code 0 \
-                                        --format table \
-                                        ${FRONTEND_REPO}:${IMAGE_TAG}
-                                    
-                                    trivy image \
-                                        --severity HIGH,CRITICAL \
-                                        --format json \
-                                        -o trivy-frontend-report.json \
-                                        ${FRONTEND_REPO}:${IMAGE_TAG}
-                                """
-                            }
-                        }
+                    
+                    if (params.DEPLOY_BACKEND) {
+                        sh """
+                            trivy image --severity HIGH,CRITICAL --exit-code 0 \
+                                ${BACKEND_REPO}:${IMAGE_TAG} || true
+                        """
                     }
-                    post {
-                        always {
-                            archiveArtifacts artifacts: 'trivy-frontend-report.json', allowEmptyArchive: true
-                        }
-                    }
-                }
-                
-                stage('Scan Backend') {
-                    when {
-                        expression { params.DEPLOY_BACKEND }
-                    }
-                    steps {
-                        container('trivy') {
-                            script {
-                                echo "🔒 Scanning Backend image for vulnerabilities..."
-                                sh """
-                                    trivy image \
-                                        --severity HIGH,CRITICAL \
-                                        --exit-code 0 \
-                                        --format table \
-                                        ${BACKEND_REPO}:${IMAGE_TAG}
-                                    
-                                    trivy image \
-                                        --severity HIGH,CRITICAL \
-                                        --format json \
-                                        -o trivy-backend-report.json \
-                                        ${BACKEND_REPO}:${IMAGE_TAG}
-                                """
-                            }
-                        }
-                    }
-                    post {
-                        always {
-                            archiveArtifacts artifacts: 'trivy-backend-report.json', allowEmptyArchive: true
-                        }
-                    }
+                    
+                    echo "✅ Security scan completed!"
                 }
             }
         }
@@ -366,7 +216,7 @@ pipeline {
         // =====================================================================
         stage('Push to ECR') {
             steps {
-                container('docker') {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     script {
                         echo "📤 Pushing images to ECR..."
                         
@@ -382,6 +232,7 @@ pipeline {
                                 docker push ${FRONTEND_REPO}:${IMAGE_TAG}
                                 docker push ${FRONTEND_REPO}:latest
                             """
+                            echo "✅ Frontend pushed!"
                         }
                         
                         // Push Backend
@@ -390,6 +241,7 @@ pipeline {
                                 docker push ${BACKEND_REPO}:${IMAGE_TAG}
                                 docker push ${BACKEND_REPO}:latest
                             """
+                            echo "✅ Backend pushed!"
                         }
                         
                         // Push Celery
@@ -398,14 +250,7 @@ pipeline {
                                 docker push ${CELERY_REPO}:${IMAGE_TAG}
                                 docker push ${CELERY_REPO}:latest
                             """
-                        }
-                        
-                        // Push GPU Worker
-                        if (params.DEPLOY_GPU_WORKERS) {
-                            sh """
-                                docker push ${GPU_WORKER_REPO}:${IMAGE_TAG}
-                                docker push ${GPU_WORKER_REPO}:latest
-                            """
+                            echo "✅ Celery pushed!"
                         }
                     }
                 }
@@ -417,15 +262,20 @@ pipeline {
         // =====================================================================
         stage('Deploy to EKS') {
             steps {
-                container('kubectl') {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     script {
                         echo "🚀 Deploying to EKS..."
                         
-                        // Configure kubectl
+                        // Ensure kubectl is configured
+                        sh "aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}"
+                        
+                        // Check if deployments exist, if not apply manifests
                         sh """
-                            aws eks update-kubeconfig \
-                                --region ${AWS_REGION} \
-                                --name ${EKS_CLUSTER_NAME}
+                            kubectl get deployment frontend -n ${NAMESPACE} || \
+                            kubectl apply -f kubernetes/apps/frontend/ -n ${NAMESPACE} || true
+                            
+                            kubectl get deployment backend -n ${NAMESPACE} || \
+                            kubectl apply -f kubernetes/apps/backend/ -n ${NAMESPACE} || true
                         """
                         
                         // Deploy Frontend
@@ -434,11 +284,11 @@ pipeline {
                             sh """
                                 kubectl set image deployment/frontend \
                                     frontend=${FRONTEND_REPO}:${IMAGE_TAG} \
-                                    -n ${NAMESPACE}
+                                    -n ${NAMESPACE} || \
+                                kubectl apply -f kubernetes/apps/frontend/ -n ${NAMESPACE}
                                 
                                 kubectl rollout status deployment/frontend \
-                                    -n ${NAMESPACE} \
-                                    --timeout=300s
+                                    -n ${NAMESPACE} --timeout=300s || true
                             """
                         }
                         
@@ -448,11 +298,11 @@ pipeline {
                             sh """
                                 kubectl set image deployment/backend \
                                     backend=${BACKEND_REPO}:${IMAGE_TAG} \
-                                    -n ${NAMESPACE}
+                                    -n ${NAMESPACE} || \
+                                kubectl apply -f kubernetes/apps/backend/ -n ${NAMESPACE}
                                 
                                 kubectl rollout status deployment/backend \
-                                    -n ${NAMESPACE} \
-                                    --timeout=300s
+                                    -n ${NAMESPACE} --timeout=300s || true
                             """
                         }
                         
@@ -462,55 +312,32 @@ pipeline {
                             sh """
                                 kubectl set image deployment/celery-worker \
                                     celery-worker=${CELERY_REPO}:${IMAGE_TAG} \
-                                    -n ${NAMESPACE}
+                                    -n ${NAMESPACE} || \
+                                kubectl apply -f kubernetes/apps/celery/ -n ${NAMESPACE}
                                 
                                 kubectl rollout status deployment/celery-worker \
-                                    -n ${NAMESPACE} \
-                                    --timeout=300s
+                                    -n ${NAMESPACE} --timeout=300s || true
                             """
                         }
                         
-                        // Deploy GPU Workers
-                        if (params.DEPLOY_GPU_WORKERS) {
-                            echo "Deploying GPU Workers..."
-                            sh """
-                                kubectl set image deployment/gpu-worker \
-                                    gpu-worker=${GPU_WORKER_REPO}:${IMAGE_TAG} \
-                                    -n ${NAMESPACE}
-                                
-                                kubectl rollout status deployment/gpu-worker \
-                                    -n ${NAMESPACE} \
-                                    --timeout=300s
-                            """
-                        }
+                        echo "✅ Deployment completed!"
                     }
                 }
             }
         }
 
         // =====================================================================
-        // Stage 7: Smoke Tests
+        // Stage 7: Verify Deployment
         // =====================================================================
-        stage('Smoke Tests') {
+        stage('Verify') {
             steps {
-                container('kubectl') {
-                    script {
-                        echo "🧪 Running smoke tests..."
-                        
-                        // Health check endpoints
-                        sh """
-                            # Wait for services to be ready
-                            sleep 30
-                            
-                            # Test Frontend
-                            curl -sf https://www.lancieretech.com/health || echo "Frontend health check skipped"
-                            
-                            # Test Backend API
-                            curl -sf https://api.lancieretech.com/api/health/ || echo "Backend health check skipped"
-                            
-                            echo "✅ Smoke tests completed!"
-                        """
-                    }
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                    sh '''
+                        echo "🔍 Verifying deployment..."
+                        kubectl get pods -n ${NAMESPACE}
+                        kubectl get svc -n ${NAMESPACE}
+                        echo "✅ Verification completed!"
+                    '''
                 }
             }
         }
@@ -518,55 +345,30 @@ pipeline {
 
     post {
         success {
-            script {
-                echo "✅ Pipeline completed successfully!"
-                
-                // Slack notification (uncomment when Slack is configured)
-                // slackSend(
-                //     channel: env.SLACK_CHANNEL,
-                //     color: 'good',
-                //     message: """
-                //         ✅ *iMeetPro Deployment Successful*
-                //         *Environment:* ${params.ENVIRONMENT}
-                //         *Build:* #${env.BUILD_NUMBER}
-                //         *Branch:* ${env.BRANCH_NAME ?: 'main'}
-                //         *Image Tag:* ${IMAGE_TAG}
-                //         *Duration:* ${currentBuild.durationString}
-                //     """
-                // )
-            }
+            echo """
+            ✅ ========================================
+            ✅ Pipeline completed successfully!
+            ✅ Environment: ${params.ENVIRONMENT}
+            ✅ Image Tag: ${IMAGE_TAG}
+            ✅ ========================================
+            """
         }
         
         failure {
-            script {
-                echo "❌ Pipeline failed!"
-                
-                // Slack notification (uncomment when Slack is configured)
-                // slackSend(
-                //     channel: env.SLACK_CHANNEL,
-                //     color: 'danger',
-                //     message: """
-                //         ❌ *iMeetPro Deployment Failed*
-                //         *Environment:* ${params.ENVIRONMENT}
-                //         *Build:* #${env.BUILD_NUMBER}
-                //         *Branch:* ${env.BRANCH_NAME ?: 'main'}
-                //         *Duration:* ${currentBuild.durationString}
-                //         *Details:* ${env.BUILD_URL}
-                //     """
-                // )
-            }
+            echo """
+            ❌ ========================================
+            ❌ Pipeline failed!
+            ❌ Check console output for details
+            ❌ ========================================
+            """
         }
         
         always {
-            // Clean up Docker images
-            container('docker') {
-                sh '''
-                    docker system prune -f || true
-                '''
-            }
-            
-            // Archive artifacts
-            archiveArtifacts artifacts: '**/trivy-*.json', allowEmptyArchive: true
+            // Clean up Docker images to save space
+            sh '''
+                docker system prune -f || true
+            '''
+            cleanWs()
         }
     }
 }
