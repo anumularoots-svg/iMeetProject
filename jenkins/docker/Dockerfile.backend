@@ -53,11 +53,20 @@ COPY --from=deps /usr/local/bin /usr/local/bin
 
 COPY --chown=appuser:appgroup . .
 
+# Create directories and log files
 RUN mkdir -p /app/staticfiles /app/mediafiles /app/logs && \
+    touch /app/attendance_verification.log \
+          /app/django.log \
+          /app/celery.log \
+          /app/meetings_debug.log \
+          /app/recurring_meetings.log \
+          /app/notifications_debug.log \
+          /app/participants_debug.log \
+          /app/recording_service_debug.log && \
     chown -R appuser:appgroup /app
 
 # Clean unnecessary files
-RUN rm -rf *.log *.sql *.pem *.key *.crt .env .vscode chromedriver* || true
+RUN rm -rf *.sql *.pem *.key *.crt .env .vscode chromedriver* || true
 
 USER appuser
 
