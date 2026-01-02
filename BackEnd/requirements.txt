@@ -129,3 +129,5 @@ tqdm==4.67.1
 prettytable==3.16.0
 websockets==10.4
 websocket-client==1.8.0
+
+opencv-python-headless==4.9.0.80
