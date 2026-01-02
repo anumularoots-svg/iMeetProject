@@ -101,8 +101,18 @@ S3_FOLDERS = {
     "subtitles": os.getenv("S3_FOLDER_SUBTITLES", "subtitles")
 }
 
-client = OpenAI()
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+try:
+    client = OpenAI()
+except Exception as e:
+    client = None
+    print(f"Warning: OpenAI client not initialized: {e}")
+    
+try:
+    groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+except Exception as e:
+    groq_client = None
+    print(f"Warning: Groq client not initialized: {e}")
+    
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # === FIXED FUNCTION 1: Enhanced S3 Key Extraction ===
