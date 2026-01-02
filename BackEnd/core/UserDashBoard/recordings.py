@@ -17,21 +17,33 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
 from django.views import View
-from graphviz import Source
+
+# Graphviz - wrap in try/except
+try:
+    from graphviz import Source
+except ImportError:
+    Source = None
+    print("Warning: graphviz not available")
+
+# PyTorch - wrap in try/except (GPU features optional)
 try:
     import torch
 except ImportError:
     torch = None
+    print("Warning: torch not available - GPU features disabled")
+
+# Transformers - wrap in try/except (GPU features optional)
 try:
     from transformers import MarianMTModel, MarianTokenizer
 except ImportError:
     MarianMTModel = None
     MarianTokenizer = None
+    print("Warning: transformers not available")
+
 import logging
 from urllib.parse import quote_plus
 from django.http import StreamingHttpResponse
 import openai
-import logging
 from django.urls import path
 from asgiref.sync import sync_to_async
 from django.http import StreamingHttpResponse, FileResponse
@@ -48,11 +60,9 @@ from django.utils import timezone
 from core.WebSocketConnection.meetings import BAD_REQUEST_STATUS, NOT_FOUND_STATUS, SERVER_ERROR_STATUS, SUCCESS_STATUS, TBL_MEETINGS, create_meetings_table
 from openai import OpenAI
 from groq import Groq
-from deep_translator import GoogleTranslator
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-import openai
 
 from core.WebSocketConnection.notifications import (
     ensure_notification_tables,
@@ -62,7 +72,8 @@ from core.WebSocketConnection.notifications import (
 )
 import pytz  # For timezone handling in notifications
 
-if torch:
+# Check GPU availability safely
+if torch is not None:
     print("Using GPU:", torch.cuda.is_available())
 else:
     print("PyTorch not available - GPU features disabled")
