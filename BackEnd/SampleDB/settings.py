@@ -13,42 +13,39 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 import pymysql
-from celery import Celery
 import certifi
 
-# Docker-aware host configuration
-if os.getenv('DOCKER_CONTAINER', 'false') == 'true':
-    # Running in Docker - use host.docker.internal
-    DB_HOST_OVERRIDE = 'host.docker.internal'
-    REDIS_HOST_OVERRIDE = 'host.docker.internal'
-else:
-    # Running on host - use configured values
-    DB_HOST_OVERRIDE = os.getenv("DB_HOST", "localhost")
-    REDIS_HOST_OVERRIDE = os.getenv("REDIS_HOST", "localhost")
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+# Ensure logs directory exists
+LOGS_DIR = os.path.join(BASE_DIR, 'logs')
+os.makedirs(LOGS_DIR, exist_ok=True)
+
+# Docker/Kubernetes-aware host configuration
+DB_HOST_OVERRIDE = os.getenv("DB_HOST", "localhost")
+REDIS_HOST_OVERRIDE = os.getenv("REDIS_HOST", "localhost")
 
 os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'hwaccel;none'
-# os.environ['CUDA_VISIBLE_DEVICES'] = ''
 os.environ['OPENCV_VIDEOIO_PRIORITY_FFMPEG'] = '0'
+
 # Fix SSL certificate issues permanently
 os.environ['SSL_CERT_FILE'] = certifi.where()
 os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 
 pymysql.install_as_MySQLdb()
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-load_dotenv(os.path.join(BASE_DIR, ".env"))
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "fallback-secret")
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "fallback-secret-key-change-in-production")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG", "False") == "True"
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 
 # Application definition
 INSTALLED_APPS = [
@@ -59,17 +56,17 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
-    'rest_framework',  # Added if you're using DRF
-    # 'core.apps.CoreConfig',
-    'core',  # Add your app here
-    'core.scheduler',  # Scheduler app for recurring meetings
+    'rest_framework',
+    'core',
+    'core.scheduler',
     'core.UserDashBoard',
     'django_extensions',
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # MUST be first
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -78,15 +75,11 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# ======== CORS CONFIGURATION - CRITICAL FIX ========
-# For development - allow all origins
+# ======== CORS CONFIGURATION ========
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
-
-# Preflight request handling
 CORS_PREFLIGHT_MAX_AGE = 86400
 
-# Comprehensive CORS headers
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -103,12 +96,6 @@ CORS_ALLOW_HEADERS = [
     'access-control-allow-credentials',
     'cache-control',
     'pragma',
-    'sec-websocket-key',
-    'sec-websocket-version',
-    'sec-websocket-protocol',
-    'sec-websocket-extensions',
-    'upgrade',
-    'connection',
 ]
 
 CORS_ALLOW_METHODS = [
@@ -121,70 +108,38 @@ CORS_ALLOW_METHODS = [
     'HEAD',
 ]
 
-# Specific origins for production (when CORS_ALLOW_ALL_ORIGINS is False)
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
-    "http://192.168.48.201:5173",
-    "https://192.168.48.201:5173",
-    "https://localhost:5173",
-    "https://localhost:8221",
-    "https://192.168.48.201:8221",
-    "http://192.168.48.25:63038",
-    "http://192.168.48.25:53711",
-    "http://127.0.0.1:3000",
-    "http://192.168.48.62:5173",
-    "https://192.168.48.23:8221",
-]
-
 # CSRF trusted origins
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
     "http://localhost:3000",
-    "http://localhost:8222",
-    "http://192.168.48.27:3000",
-    "http://192.168.48.27:5173",
-    "http://192.168.48.201:5173",
-    "https://localhost:8221",
-    "https://127.0.0.1:8221",
-    "https://192.168.48.23:8221",
-    "https://192.168.48.201:5173",
-    "https://192.168.48.62:5173",
+    "https://www.lancieretech.com",
+    "https://api.lancieretech.com",
 ]
 
-# ======== SESSION SETTINGS - CRITICAL FIXES ========
+# ======== SESSION SETTINGS ========
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
-SESSION_COOKIE_AGE = 86400  # 24 hours (increased from 10 minutes)
+SESSION_COOKIE_AGE = 86400
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
-SESSION_COOKIE_HTTPONLY = False  # Must be False for frontend access
-SESSION_COOKIE_SAMESITE = 'Lax'  # Use 'Lax' for cross-origin
-SESSION_COOKIE_SECURE = False  # False for development (HTTP)
+SESSION_COOKIE_HTTPONLY = False
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = False
 SESSION_COOKIE_NAME = 'sessionid'
 
-# ======== CSRF SETTINGS - CRITICAL FIXES ========
+# ======== CSRF SETTINGS ========
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_SECURE = False  # False for development (HTTP)
+CSRF_COOKIE_SECURE = False
 CSRF_USE_SESSIONS = False
 CSRF_COOKIE_NAME = 'csrftoken'
-CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'
 
-# Security settings for development
-SECURE_SSL_REDIRECT = False  # Keep False for development
+# Security settings
+SECURE_SSL_REDIRECT = False
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 USE_X_FORWARDED_PORT = True
-
-# Security headers
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
-SECURE_HSTS_SECONDS = 0  # Disable HSTS for development
 
 ROOT_URLCONF = 'SampleDB.urls'
 
@@ -207,27 +162,13 @@ WSGI_APPLICATION = 'SampleDB.wsgi.application'
 ASGI_APPLICATION = 'SampleDB.asgi.application'
 
 # Database
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.mysql",
-#         "NAME": os.getenv("DB_NAME", "SampleDB"),
-#         "USER": os.getenv("DB_USER", "sa"),
-#         "PASSWORD": os.getenv("DB_PASSWORD", "Welcome@123"),
-#         "HOST": os.getenv("DB_HOST", "127.0.0.1"),
-#         "PORT": os.getenv("DB_PORT", "3306"),
-#         "OPTIONS": {
-#             "init_command": "SET sql_mode='STRICT_TRANS_TABLES'"
-#         },
-#     }
-# }
-
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
         "NAME": os.getenv("DB_NAME", "imeetpro"),
-        "USER": os.getenv("DB_USER", "imeetpro_admin"),
-        "PASSWORD": os.getenv("DB_PASSWORD", "LanciereTech2024SecurePass123"),
-        "HOST": DB_HOST_OVERRIDE,  # Use override
+        "USER": os.getenv("DB_USER", "imeetpro_user"),
+        "PASSWORD": os.getenv("DB_PASSWORD", ""),
+        "HOST": DB_HOST_OVERRIDE,
         "PORT": os.getenv("DB_PORT", "3306"),
         "OPTIONS": {
             "init_command": "SET sql_mode='STRICT_TRANS_TABLES'"
@@ -237,18 +178,10 @@ DATABASES = {
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 # REST Framework configuration
@@ -273,42 +206,37 @@ CHANNEL_LAYERS = {
     }
 }
 
-# ======== CELERY CONFIGURATION FOR RECURRING MEETINGS ========
-# Set the default Django settings module for the 'celery' program
+# ======== CELERY CONFIGURATION ========
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'SampleDB.settings')
 
-# Celery broker configuration
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL")
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND")
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = os.getenv("CELERY_TIMEZONE", "Asia/Kolkata")
 CELERY_ENABLE_UTC = True
-
-# Celery worker configuration
-CELERY_TASK_ALWAYS_EAGER = False  # Set to True for testing without Redis
+CELERY_TASK_ALWAYS_EAGER = False
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_ACKS_LATE = True
 
-# Celery Beat scheduler settings for recurring tasks
 CELERY_BEAT_SCHEDULE = {
     'update-recurring-meetings': {
         'task': 'core.scheduler.tasks.update_recurring_meetings_task',
-        'schedule': 60.0,  # Run every minute to check for new meetings
+        'schedule': 60.0,
     },
     'send-daily-invitations': {
         'task': 'core.scheduler.tasks.send_daily_invitations_task',
-        'schedule': 60.0 * 60,  # Run every hour to send invitations
+        'schedule': 60.0 * 60,
     },
     'send-meeting-reminders': {
         'task': 'core.scheduler.tasks.send_meeting_reminders_task',
-        'schedule': 60.0,  # Run every minute to check for reminders
+        'schedule': 60.0,
     },
     'cleanup-old-meetings': {
         'task': 'core.scheduler.tasks.cleanup_old_meetings_task',
-        'schedule': 60.0 * 60 * 24,  # Run daily to cleanup old meetings
+        'schedule': 60.0 * 60 * 24,
     },
 }
 
@@ -321,6 +249,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
@@ -329,20 +258,18 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # File upload settings
-# DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 1024  # 1GB
-# FILE_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 1024  # 1GB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024 * 1024  # 10GB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024 * 1024  # 10GB
 
 # Email configuration
-EMAIL_HOST = os.getenv("EMAIL_HOST")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "")
 
-# Enhanced Logging configuration
+# ======== LOGGING CONFIGURATION - FIXED PATHS ========
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -363,25 +290,22 @@ LOGGING = {
         },
         'file': {
             'class': 'logging.FileHandler',
-            'filename': 'django.log',
+            'filename': os.path.join(LOGS_DIR, 'django.log'),
             'formatter': 'verbose',
         },
-        # Dedicated file for meetings logs
         'meetings_file': {
             'class': 'logging.FileHandler',
-            'filename': 'meetings_debug.log',
+            'filename': os.path.join(LOGS_DIR, 'meetings.log'),
             'formatter': 'verbose',
         },
-        # Dedicated file for scheduler logs
         'scheduler_file': {
             'class': 'logging.FileHandler',
-            'filename': 'recurring_meetings.log',
+            'filename': os.path.join(LOGS_DIR, 'scheduler.log'),
             'formatter': 'verbose',
         },
-        # Celery logs
         'celery_file': {
             'class': 'logging.FileHandler',
-            'filename': 'celery.log',
+            'filename': os.path.join(LOGS_DIR, 'celery.log'),
             'formatter': 'verbose',
         },
     },
@@ -390,46 +314,28 @@ LOGGING = {
         'level': 'INFO',
     },
     'loggers': {
-        'django.request': {
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        'django.contrib.sessions': {
+        'django': {
             'handlers': ['console'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        'corsheaders': {
-            'handlers': ['console'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        # Meetings logs - only to file
-        'meetings': {
-            'handlers': ['meetings_file'],
             'level': 'INFO',
             'propagate': False,
         },
-        # Scheduler logs
+        'django.request': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'meetings': {
+            'handlers': ['meetings_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
         'core.scheduler': {
             'handlers': ['scheduler_file', 'console'],
             'level': 'INFO',
             'propagate': False,
         },
-        # Celery logs
         'celery': {
             'handlers': ['celery_file', 'console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'celery.task': {
-            'handlers': ['celery_file'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'celery.worker': {
-            'handlers': ['celery_file'],
             'level': 'INFO',
             'propagate': False,
         },
@@ -438,27 +344,22 @@ LOGGING = {
 
 # LiveKit Configuration
 LIVEKIT_SETTINGS = {
-    'URL': os.getenv("LIVEKIT_URL"),
-    'API_KEY': os.getenv("LIVEKIT_API_KEY"),
-    'API_SECRET': os.getenv("LIVEKIT_API_SECRET"),
+    'URL': os.getenv("LIVEKIT_URL", ""),
+    'API_KEY': os.getenv("LIVEKIT_API_KEY", ""),
+    'API_SECRET': os.getenv("LIVEKIT_API_SECRET", ""),
     'TOKEN_TTL': int(os.getenv("LIVEKIT_TOKEN_TTL", 3600)),
     'MAX_PARTICIPANTS': int(os.getenv("LIVEKIT_MAX_PARTICIPANTS", 200)),
     'ROOM_TIMEOUT': int(os.getenv("LIVEKIT_ROOM_TIMEOUT", 300)),
 }
 
-# Additional settings for debugging CORS issues
-if DEBUG:
-    CORS_ORIGIN_ALLOW_ALL = True  # Alternative to CORS_ALLOW_ALL_ORIGINS
-
 APPEND_SLASH = True
 
 # ======== RECURRING MEETINGS SETTINGS ========
-# Custom settings for recurring meetings functionality
 RECURRING_MEETINGS = {
-    'MAX_FUTURE_MEETINGS': 10,  # Maximum number of future meetings to create
-    'CLEANUP_DAYS': 30,  # Days after which to cleanup old meetings
-    'REMINDER_MINUTES': [60, 30, 10],  # Minutes before meeting to send reminders
-    'DEFAULT_DURATION': 60,  # Default meeting duration in minutes
+    'MAX_FUTURE_MEETINGS': 10,
+    'CLEANUP_DAYS': 30,
+    'REMINDER_MINUTES': [60, 30, 10],
+    'DEFAULT_DURATION': 60,
 }
 
 # Task queue settings
@@ -467,17 +368,4 @@ CELERY_TASK_ROUTES = {
     'core.tasks.*': {'queue': 'default'},
 }
 
-# Queue configuration
 CELERY_TASK_DEFAULT_QUEUE = 'default'
-CELERY_TASK_QUEUES = {
-    'default': {
-        'exchange': 'default',
-        'exchange_type': 'direct',
-        'routing_key': 'default',
-    },
-    'scheduler': {
-        'exchange': 'scheduler',
-        'exchange_type': 'direct',
-        'routing_key': 'scheduler',
-    },
-}
