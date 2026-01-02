@@ -1,6 +1,7 @@
 # =============================================================================
 # iMeetPro Backend - Requirements (No GPU)
 # =============================================================================
+
 # Django Core
 Django==5.0.14
 djangorestframework==3.16.0
@@ -134,6 +135,12 @@ flatbuffers==25.2.10
 # Visualization & Graphing
 graphviz==0.20.3
 
+# Audio Processing (recordings.py)
+pydub==0.25.1
+
+# Translation (recordings.py)
+deep-translator==1.11.4
+
 # WebSocket & Network
 websockets==10.4
 websocket-client==1.8.0
@@ -146,6 +153,9 @@ incremental==24.7.2
 hyperlink==21.0.0
 Automat==25.4.16
 service-identity==24.2.0
+
+# MongoDB ObjectId
+bson==0.5.10
 
 # Other utilities
 colorama==0.4.6
