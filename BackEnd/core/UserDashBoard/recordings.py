@@ -44,7 +44,6 @@ import boto3
 from botocore.exceptions import NoCredentialsError
 from pydub import AudioSegment
 from deep_translator import GoogleTranslator
-import torch
 from django.utils import timezone
 from core.WebSocketConnection.meetings import BAD_REQUEST_STATUS, NOT_FOUND_STATUS, SERVER_ERROR_STATUS, SUCCESS_STATUS, TBL_MEETINGS, create_meetings_table
 from openai import OpenAI
@@ -63,7 +62,10 @@ from core.WebSocketConnection.notifications import (
 )
 import pytz  # For timezone handling in notifications
 
-print("Using GPU:", torch.cuda.is_available())
+if torch:
+    print("Using GPU:", torch.cuda.is_available())
+else:
+    print("PyTorch not available - GPU features disabled")
 
 # === CONFIGURATION ===
 # AWS Configuration
@@ -1438,8 +1440,16 @@ Format exactly as:
 
 # === ENHANCED VIDEO PROCESSING WITH FASTAPI FEATURES ===
 # Add these imports at the very top of your file
-import torch
-from transformers import MarianMTModel, MarianTokenizer
+try:
+    import torch
+except ImportError:
+    torch = None
+
+try:
+    from transformers import MarianMTModel, MarianTokenizer
+except ImportError:
+    MarianMTModel = None
+    MarianTokenizer = None
 import logging
 
 class LocalIndianLanguageTranslator:
