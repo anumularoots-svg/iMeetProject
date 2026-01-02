@@ -154,3 +154,7 @@ humanfriendly==10.0
 tqdm==4.67.1
 prettytable==3.16.0
 soupsieve==2.7
+
+# PyTorch CPU-only (required by recordings.py)
+torch==2.2.0
+
