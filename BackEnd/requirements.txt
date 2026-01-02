@@ -154,9 +154,6 @@ hyperlink==21.0.0
 Automat==25.4.16
 service-identity==24.2.0
 
-# MongoDB ObjectId
-bson==0.5.10
-
 # Other utilities
 colorama==0.4.6
 coloredlogs==15.0.1
