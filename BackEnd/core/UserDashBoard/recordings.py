@@ -18,8 +18,15 @@ from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
 from django.views import View
 from graphviz import Source
-import torch
-from transformers import MarianMTModel, MarianTokenizer
+try:
+    import torch
+except ImportError:
+    torch = None
+try:
+    from transformers import MarianMTModel, MarianTokenizer
+except ImportError:
+    MarianMTModel = None
+    MarianTokenizer = None
 import logging
 from urllib.parse import quote_plus
 from django.http import StreamingHttpResponse
