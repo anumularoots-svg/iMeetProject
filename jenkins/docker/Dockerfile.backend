@@ -64,6 +64,7 @@ RUN mkdir -p /app/staticfiles /app/mediafiles /app/logs && \
           /app/participants_debug.log \
           /app/recording_service_debug.log && \
     chown -R appuser:appgroup /app
+    chmod -R 777 /app
 
 # Clean unnecessary files
 RUN rm -rf *.sql *.pem *.key *.crt .env .vscode chromedriver* || true
