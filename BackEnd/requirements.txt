@@ -146,3 +146,4 @@ incremental==24.7.2
 hyperlink==21.0.0
 Automat==25.4.16
 service-identity==24.2.0
+aiopg==1.4.0
