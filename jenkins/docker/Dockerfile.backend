@@ -1,7 +1,6 @@
 # =============================================================================
 # iMeetPro Backend - Multi-stage Dockerfile (Fixed)
 # =============================================================================
-
 FROM python:3.11-slim AS deps
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -33,11 +32,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR $APP_HOME
 
-# Install runtime dependencies
+# Install runtime dependencies (including OpenCV requirements)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     default-mysql-client \
     libmariadb3 \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
