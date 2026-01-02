@@ -26,7 +26,7 @@ spec:
         tier: frontend
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "80"
+        prometheus.io/port: "8080"
     spec:
       serviceAccountName: imeetpro-sa
       containers:
@@ -61,7 +61,7 @@ spec:
             failureThreshold: 3
           securityContext:
             runAsNonRoot: true
-            runAsUser: 1001
+            runAsUser: 101
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
           volumeMounts:
@@ -97,7 +97,6 @@ spec:
           labelSelector:
             matchLabels:
               app: frontend
-
 ---
 apiVersion: v1
 kind: Service
@@ -115,7 +114,6 @@ spec:
       name: http
   selector:
     app: frontend
-
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -142,7 +140,6 @@ spec:
         target:
           type: Utilization
           averageUtilization: 80
-
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
