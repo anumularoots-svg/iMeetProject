@@ -29,7 +29,7 @@ class Migration(migrations.Migration):
                 ('ended_at', models.DateTimeField(blank=True, null=True)),
                 ('is_recording_enabled', models.BooleanField(blank=True, default=False, null=True)),
                 ('waiting_room_enabled', models.BooleanField(blank=True, default=False, null=True)),
-                ('host_id', models.ForeignKey(on_delete=django.db.models.deletion.DO_NOTHING, related_name='meetings', to=settings.AUTH_USER_MODEL)),
+                ('host_id', models.ForeignKey(db_column='Host_ID', on_delete=django.db.models.deletion.DO_NOTHING, related_name='meetings', to=settings.AUTH_USER_MODEL)),
             ],
             options={
                 'db_table': 'tbl_Meetings',
