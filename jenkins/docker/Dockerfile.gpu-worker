@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     build-essential \
     libpq-dev \
+    default-libmysqlclient-dev \
+    pkg-config \
     curl \
     wget \
     git \
