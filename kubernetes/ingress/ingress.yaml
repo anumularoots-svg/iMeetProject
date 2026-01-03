@@ -1,5 +1,5 @@
 # =============================================================================
-# iMeetPro Ingress Configuration
+# iMeetPro Ingress Configuration with TLS
 # =============================================================================
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -21,13 +21,12 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - imeetpro.com
-        - www.imeetpro.com
-        - api.imeetpro.com
+        - www.lancieretech.com
+        - api.lancieretech.com
       secretName: imeetpro-tls
   rules:
     # Frontend
-    - host: imeetpro.com
+    - host: www.lancieretech.com
       http:
         paths:
           - path: /
@@ -37,21 +36,8 @@ spec:
                 name: frontend
                 port:
                   number: 80
-    
-    # Frontend (www)
-    - host: www.imeetpro.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: frontend
-                port:
-                  number: 80
-    
     # Backend API
-    - host: api.imeetpro.com
+    - host: api.lancieretech.com
       http:
         paths:
           - path: /
@@ -61,7 +47,6 @@ spec:
                 name: backend
                 port:
                   number: 8000
-
 ---
 # ClusterIssuer for Let's Encrypt
 apiVersion: cert-manager.io/v1
@@ -71,53 +56,10 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@imeetpro.com
+    email: akhil@lancieretech.com
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
       - http01:
           ingress:
             class: nginx
-
----
-# Internal Ingress for Monitoring (Private)
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: monitoring-ingress
-  namespace: monitoring
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: monitoring-auth
-    nginx.ingress.kubernetes.io/auth-realm: "Authentication Required"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - grafana.internal.imeetpro.com
-        - prometheus.internal.imeetpro.com
-      secretName: monitoring-tls
-  rules:
-    - host: grafana.internal.imeetpro.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: monitoring-grafana
-                port:
-                  number: 80
-    
-    - host: prometheus.internal.imeetpro.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: monitoring-kube-prometheus-prometheus
-                port:
-                  number: 9090
