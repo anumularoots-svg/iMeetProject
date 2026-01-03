@@ -22,7 +22,6 @@ pipeline {
         
         // EKS Configuration
         EKS_CLUSTER_NAME = 'imeetpro-prod-eks'
-        NAMESPACE = 'imeetpro'
         
         // Image Tag
         IMAGE_TAG = "${env.BUILD_NUMBER}"
@@ -90,7 +89,12 @@ pipeline {
                             credentialsId: 'github-credentials'
                         ]]
                     ])
-                    currentBuild.description = "Env: ${params.ENVIRONMENT}, Tag: ${IMAGE_TAG}"
+                    
+                    // Set namespace based on environment
+                    env.NAMESPACE = params.ENVIRONMENT == 'prod' ? 'imeetpro-prod' : 'imeetpro-dev'
+                    
+                    currentBuild.description = "Env: ${params.ENVIRONMENT}, NS: ${env.NAMESPACE}, Tag: ${IMAGE_TAG}"
+                    echo "📍 Target Namespace: ${env.NAMESPACE}"
                 }
             }
         }
@@ -124,16 +128,17 @@ pipeline {
                     steps {
                         script {
                             echo "🏗️ Building Frontend Docker image..."
-                            dir('frontend') {
-                                sh """
-                                    docker build \
-                                        --build-arg VITE_API_URL=https://api.lancieretech.com \
-                                        --build-arg VITE_LIVEKIT_URL=wss://imeetpro-fbrcr2mk.livekit.cloud \
-                                        -t ${FRONTEND_REPO}:${IMAGE_TAG} \
-                                        -t ${FRONTEND_REPO}:latest \
-                                        -f Dockerfile .
-                                """
-                            }
+                            // Copy nginx config to frontend for build context
+                            sh """
+                                cp -r jenkins/docker/nginx frontend/
+                                docker build \
+                                    --build-arg VITE_API_URL=https://api.lancieretech.com \
+                                    --build-arg VITE_LIVEKIT_URL=wss://imeetpro-fbrcr2mk.livekit.cloud \
+                                    -t ${FRONTEND_REPO}:${IMAGE_TAG} \
+                                    -t ${FRONTEND_REPO}:latest \
+                                    -f jenkins/docker/Dockerfile.frontend \
+                                    ./frontend
+                            """
                             echo "✅ Frontend image built!"
                         }
                     }
@@ -146,14 +151,13 @@ pipeline {
                     steps {
                         script {
                             echo "🏗️ Building Backend Docker image..."
-                            dir('BackEnd') {
-                                sh """
-                                    docker build \
-                                        -t ${BACKEND_REPO}:${IMAGE_TAG} \
-                                        -t ${BACKEND_REPO}:latest \
-                                        -f Dockerfile .
-                                """
-                            }
+                            sh """
+                                docker build \
+                                    -t ${BACKEND_REPO}:${IMAGE_TAG} \
+                                    -t ${BACKEND_REPO}:latest \
+                                    -f jenkins/docker/Dockerfile.backend \
+                                    ./BackEnd
+                            """
                             echo "✅ Backend image built!"
                         }
                     }
@@ -166,15 +170,13 @@ pipeline {
                     steps {
                         script {
                             echo "🏗️ Building Celery Worker Docker image..."
-                            // Celery uses same backend image
-                            dir('BackEnd') {
-                                sh """
-                                    docker build \
-                                        -t ${CELERY_REPO}:${IMAGE_TAG} \
-                                        -t ${CELERY_REPO}:latest \
-                                        -f Dockerfile .
-                                """
-                            }
+                            sh """
+                                docker build \
+                                    -t ${CELERY_REPO}:${IMAGE_TAG} \
+                                    -t ${CELERY_REPO}:latest \
+                                    -f jenkins/docker/Dockerfile.celery \
+                                    ./BackEnd
+                            """
                             echo "✅ Celery image built!"
                         }
                     }
@@ -187,14 +189,13 @@ pipeline {
                     steps {
                         script {
                             echo "🏗️ Building GPU Worker Docker image..."
-                            dir('BackEnd') {
-                                sh """
-                                    docker build \
-                                        -t ${GPU_WORKER_REPO}:${IMAGE_TAG} \
-                                        -t ${GPU_WORKER_REPO}:latest \
-                                        -f Dockerfile.gpu .
-                                """
-                            }
+                            sh """
+                                docker build \
+                                    -t ${GPU_WORKER_REPO}:${IMAGE_TAG} \
+                                    -t ${GPU_WORKER_REPO}:latest \
+                                    -f jenkins/docker/Dockerfile.gpu-worker \
+                                    ./BackEnd
+                            """
                             echo "✅ GPU Worker image built!"
                         }
                     }
@@ -224,6 +225,13 @@ pipeline {
                         sh """
                             trivy image --severity HIGH,CRITICAL --exit-code 0 \
                                 ${BACKEND_REPO}:${IMAGE_TAG} || true
+                        """
+                    }
+                    
+                    if (params.DEPLOY_CELERY) {
+                        sh """
+                            trivy image --severity HIGH,CRITICAL --exit-code 0 \
+                                ${CELERY_REPO}:${IMAGE_TAG} || true
                         """
                     }
                     
@@ -302,89 +310,70 @@ pipeline {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                     script {
                         echo "🚀 Deploying to EKS..."
+                        echo "📍 Target Namespace: ${env.NAMESPACE}"
                         
                         // Ensure kubectl is configured
                         sh "aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}"
                         
-                        // Check if deployments exist, if not apply manifests
-                        sh """
-                            kubectl get deployment frontend -n ${NAMESPACE} || \
-                            kubectl apply -f kubernetes/apps/frontend/ -n ${NAMESPACE} || true
-                            
-                            kubectl get deployment backend -n ${NAMESPACE} || \
-                            kubectl apply -f kubernetes/apps/backend/ -n ${NAMESPACE} || true
-                        """
-                        
                         // Deploy Frontend
                         if (params.DEPLOY_FRONTEND) {
-                            echo "🚀 Deploying Frontend..."
+                            echo "🌐 Deploying Frontend..."
                             sh """
                                 kubectl set image deployment/frontend \
                                     frontend=${FRONTEND_REPO}:${IMAGE_TAG} \
-                                    -n ${NAMESPACE} || \
-                                kubectl apply -f kubernetes/apps/frontend/ -n ${NAMESPACE}
+                                    -n ${env.NAMESPACE} || \
+                                kubectl apply -f kubernetes/apps/frontend/ -n ${env.NAMESPACE}
                                 
                                 kubectl rollout status deployment/frontend \
-                                    -n ${NAMESPACE} --timeout=300s || true
+                                    -n ${env.NAMESPACE} --timeout=300s || true
                             """
+                            echo "✅ Frontend deployed!"
                         }
                         
                         // Deploy Backend
                         if (params.DEPLOY_BACKEND) {
-                            echo "🚀 Deploying Backend..."
+                            echo "⚙️ Deploying Backend..."
                             sh """
                                 kubectl set image deployment/backend \
                                     backend=${BACKEND_REPO}:${IMAGE_TAG} \
-                                    -n ${NAMESPACE} || \
-                                kubectl apply -f kubernetes/apps/backend/ -n ${NAMESPACE}
+                                    -n ${env.NAMESPACE} || \
+                                kubectl apply -f kubernetes/apps/backend/ -n ${env.NAMESPACE}
                                 
                                 kubectl rollout status deployment/backend \
-                                    -n ${NAMESPACE} --timeout=300s || true
+                                    -n ${env.NAMESPACE} --timeout=300s || true
                             """
+                            echo "✅ Backend deployed!"
                         }
                         
-                        // Deploy Celery Workers (uses backend image, module is SampleDB)
+                        // Deploy Celery Workers
                         if (params.DEPLOY_CELERY) {
-                            echo "🚀 Deploying Celery Workers..."
+                            echo "📊 Deploying Celery Workers..."
                             sh """
-                                # Apply celery deployment if not exists
-                                kubectl get deployment celery-worker -n ${NAMESPACE} || \
-                                kubectl apply -f kubernetes/apps/celery/ -n ${NAMESPACE}
-                                
-                                # Update celery-worker image
                                 kubectl set image deployment/celery-worker \
-                                    celery-worker=${BACKEND_REPO}:${IMAGE_TAG} \
-                                    -n ${NAMESPACE} || true
-                                
-                                # Update celery-beat image
-                                kubectl set image deployment/celery-beat \
-                                    celery-beat=${BACKEND_REPO}:${IMAGE_TAG} \
-                                    -n ${NAMESPACE} || true
+                                    celery-worker=${CELERY_REPO}:${IMAGE_TAG} \
+                                    -n ${env.NAMESPACE} || \
+                                kubectl apply -f kubernetes/apps/celery/ -n ${env.NAMESPACE}
                                 
                                 kubectl rollout status deployment/celery-worker \
-                                    -n ${NAMESPACE} --timeout=300s || true
+                                    -n ${env.NAMESPACE} --timeout=300s || true
                             """
+                            echo "✅ Celery Workers deployed!"
                         }
                         
                         // Deploy GPU Workers
                         if (params.DEPLOY_GPU_WORKERS) {
-                            echo "🚀 Deploying GPU Workers..."
+                            echo "🎮 Deploying GPU Workers..."
                             sh """
-                                # Apply GPU worker deployment if not exists
-                                kubectl get deployment gpu-worker -n ${NAMESPACE} || \
-                                kubectl apply -f kubernetes/apps/gpu-workers/ -n ${NAMESPACE}
-                                
-                                # Update GPU worker image
                                 kubectl set image deployment/gpu-worker \
                                     gpu-worker=${GPU_WORKER_REPO}:${IMAGE_TAG} \
-                                    -n ${NAMESPACE} || true
+                                    -n ${env.NAMESPACE} || \
+                                kubectl apply -f kubernetes/apps/gpu-workers/ -n ${env.NAMESPACE}
                                 
                                 kubectl rollout status deployment/gpu-worker \
-                                    -n ${NAMESPACE} --timeout=600s || true
+                                    -n ${env.NAMESPACE} --timeout=600s || true
                             """
+                            echo "✅ GPU Workers deployed!"
                         }
-                        
-                        echo "✅ Deployment completed!"
                     }
                 }
             }
@@ -396,30 +385,44 @@ pipeline {
         stage('Verify') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                    sh '''
-                        echo "============================================="
-                        echo "        🔍 DEPLOYMENT VERIFICATION"
-                        echo "============================================="
-                        echo ""
-                        echo "=== Application Pods ==="
-                        kubectl get pods -n ${NAMESPACE}
-                        echo ""
-                        echo "=== Services ==="
-                        kubectl get svc -n ${NAMESPACE}
-                        echo ""
-                        echo "=== Ingress ==="
-                        kubectl get ingress -n ${NAMESPACE}
-                        echo ""
-                        echo "=== Database Pods ==="
-                        kubectl get pods -n databases
-                        echo ""
-                        echo "=== Recent Events ==="
-                        kubectl get events -n ${NAMESPACE} --sort-by='.lastTimestamp' | tail -10
-                        echo ""
-                        echo "============================================="
-                        echo "        ✅ VERIFICATION COMPLETED"
-                        echo "============================================="
-                    '''
+                    script {
+                        sh """
+                            echo "============================================="
+                            echo "        🔍 DEPLOYMENT VERIFICATION"
+                            echo "============================================="
+                            echo ""
+                            echo "=== Application Pods ==="
+                            kubectl get pods -n ${env.NAMESPACE}
+                            echo ""
+                            echo "=== Services ==="
+                            kubectl get svc -n ${env.NAMESPACE}
+                            echo ""
+                            echo "=== Ingress ==="
+                            kubectl get ingress -n ${env.NAMESPACE}
+                            echo ""
+                            echo "=== Database Pods ==="
+                            kubectl get pods -n databases
+                            echo ""
+                            echo "=== Recent Events ==="
+                            kubectl get events -n ${env.NAMESPACE} --sort-by='.lastTimestamp' | tail -10
+                            echo ""
+                            echo "============================================="
+                            echo "        ✅ VERIFICATION COMPLETED"
+                            echo "============================================="
+                        """
+                        
+                        // Health checks for prod
+                        if (params.ENVIRONMENT == 'prod') {
+                            echo "🏥 Running health checks..."
+                            sh '''
+                                echo "Checking Frontend..."
+                                curl -sf https://www.lancieretech.com -o /dev/null && echo "✅ Frontend: OK" || echo "⚠️ Frontend: Check needed"
+                                
+                                echo "Checking Backend API..."
+                                curl -sf https://api.lancieretech.com/api/videos/lists -o /dev/null && echo "✅ Backend API: OK" || echo "⚠️ Backend API: Check needed"
+                            '''
+                        }
+                    }
                 }
             }
         }
@@ -431,6 +434,7 @@ pipeline {
             ✅ ========================================
             ✅ Pipeline completed successfully!
             ✅ Environment: ${params.ENVIRONMENT}
+            ✅ Namespace: ${env.NAMESPACE}
             ✅ Image Tag: ${IMAGE_TAG}
             ✅ ========================================
             ✅ Frontend:    https://www.lancieretech.com
