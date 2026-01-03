@@ -244,6 +244,7 @@ resource "aws_eks_node_group" "gpu" {
   instance_types = var.gpu_node_instance_types
   capacity_type  = "ON_DEMAND"
   ami_type       = "AL2_x86_64_GPU"
+  disk_size      = 100
 
   scaling_config {
     desired_size = var.gpu_node_desired_size
