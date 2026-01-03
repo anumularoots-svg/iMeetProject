@@ -1,5 +1,5 @@
 # =============================================================================
-# Redis Deployment for iMeetPro
+# Redis Deployment for iMeetPro - Production
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -60,7 +60,7 @@ spec:
       volumes:
         - name: redis-data
           emptyDir: {}
-          # For production, use PVC:
+          # For production with persistent storage:
           # persistentVolumeClaim:
           #   claimName: redis-pvc
 ---

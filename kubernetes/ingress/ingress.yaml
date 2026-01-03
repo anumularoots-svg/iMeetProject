@@ -1,5 +1,5 @@
 # =============================================================================
-# iMeetPro Ingress Configuration with TLS
+# iMeetPro Ingress Configuration - Production
 # =============================================================================
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -48,7 +48,7 @@ spec:
                 port:
                   number: 8000
 ---
-# ClusterIssuer for Let's Encrypt
+# ClusterIssuer for Let's Encrypt SSL Certificates
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:

@@ -1,5 +1,5 @@
 # =============================================================================
-# Celery Worker Deployment for iMeetPro
+# Celery Worker Deployment for iMeetPro - Production
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -25,7 +25,7 @@ spec:
           command:
             - celery
             - -A
-            - config
+            - SampleDB
             - worker
             - -l
             - INFO
@@ -79,7 +79,7 @@ spec:
           command:
             - celery
             - -A
-            - config
+            - SampleDB
             - beat
             - -l
             - INFO

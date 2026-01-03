@@ -1,5 +1,5 @@
 # =============================================================================
-# MongoDB Deployment for iMeetPro
+# MongoDB Deployment for iMeetPro - Production
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -57,7 +57,7 @@ spec:
       volumes:
         - name: mongo-data
           emptyDir: {}
-          # For production, use PVC:
+          # For production with persistent storage:
           # persistentVolumeClaim:
           #   claimName: mongodb-pvc
 ---
@@ -77,7 +77,7 @@ spec:
   selector:
     app: mongodb
 ---
-# Optional: PersistentVolumeClaim for production
+# Uncomment for persistent storage
 # apiVersion: v1
 # kind: PersistentVolumeClaim
 # metadata:
