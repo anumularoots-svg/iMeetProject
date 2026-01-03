@@ -174,7 +174,7 @@ pipeline {
                                 docker tag ${BACKEND_REPO}:${IMAGE_TAG} ${CELERY_REPO}:${IMAGE_TAG}
                                 docker tag ${BACKEND_REPO}:latest ${CELERY_REPO}:lates
                             """
-                            echo "✅ Celery image ready!""
+                            echo "✅ Celery image ready!"
                         }
                     }
                 }
