@@ -117,7 +117,7 @@ pipeline {
         }
 
         // =====================================================================
-        // Stage 3: Build Docker Images
+        // Stage 3: Build Docker Images (Parallel)
         // =====================================================================
         stage('Build Images') {
             parallel {
@@ -128,7 +128,6 @@ pipeline {
                     steps {
                         script {
                             echo "🏗️ Building Frontend Docker image..."
-                            // Copy nginx config to frontend for build context
                             sh """
                                 cp -r jenkins/docker/nginx frontend/
                                 docker build \
@@ -163,22 +162,6 @@ pipeline {
                     }
                 }
                 
-                stage('Build Celery') {
-                    when {
-                        expression { params.DEPLOY_CELERY }
-                    }
-                    steps {
-                        script {
-                            echo "🏗️  Tagging Backend image for Celery Worker..."
-                            sh """
-                                docker tag ${BACKEND_REPO}:${IMAGE_TAG} ${CELERY_REPO}:${IMAGE_TAG}
-                                docker tag ${BACKEND_REPO}:latest ${CELERY_REPO}:latest
-                            """
-                            echo "✅ Celery image ready!"
-                        }
-                    }
-                }
-                
                 stage('Build GPU Worker') {
                     when {
                         expression { params.DEPLOY_GPU_WORKERS }
@@ -201,7 +184,26 @@ pipeline {
         }
 
         // =====================================================================
-        // Stage 4: Security Scan (Trivy)
+        // Stage 4: Tag Celery Image (After Backend Build)
+        // =====================================================================
+        stage('Tag Celery Image') {
+            when {
+                expression { params.DEPLOY_CELERY && params.DEPLOY_BACKEND }
+            }
+            steps {
+                script {
+                    echo "🏗️ Tagging Backend image for Celery Worker..."
+                    sh """
+                        docker tag ${BACKEND_REPO}:${IMAGE_TAG} ${CELERY_REPO}:${IMAGE_TAG}
+                        docker tag ${BACKEND_REPO}:latest ${CELERY_REPO}:latest
+                    """
+                    echo "✅ Celery image ready!"
+                }
+            }
+        }
+
+        // =====================================================================
+        // Stage 5: Security Scan (Trivy)
         // =====================================================================
         stage('Security Scan') {
             when {
@@ -225,13 +227,6 @@ pipeline {
                         """
                     }
                     
-                    if (params.DEPLOY_CELERY) {
-                        sh """
-                            trivy image --severity HIGH,CRITICAL --exit-code 0 \
-                                ${CELERY_REPO}:${IMAGE_TAG} || true
-                        """
-                    }
-                    
                     if (params.DEPLOY_GPU_WORKERS) {
                         sh """
                             trivy image --severity HIGH,CRITICAL --exit-code 0 \
@@ -245,7 +240,7 @@ pipeline {
         }
 
         // =====================================================================
-        // Stage 5: Push to ECR
+        // Stage 6: Push to ECR
         // =====================================================================
         stage('Push to ECR') {
             steps {
@@ -277,8 +272,8 @@ pipeline {
                             echo "✅ Backend pushed!"
                         }
                         
-                        // Push Celery
-                        if (params.DEPLOY_CELERY) {
+                        // Push Celery (only if both Celery and Backend are selected)
+                        if (params.DEPLOY_CELERY && params.DEPLOY_BACKEND) {
                             sh """
                                 docker push ${CELERY_REPO}:${IMAGE_TAG}
                                 docker push ${CELERY_REPO}:latest
@@ -300,7 +295,7 @@ pipeline {
         }
 
         // =====================================================================
-        // Stage 6: Deploy to EKS
+        // Stage 7: Deploy to EKS
         // =====================================================================
         stage('Deploy to EKS') {
             steps {
@@ -377,7 +372,7 @@ pipeline {
         }
 
         // =====================================================================
-        // Stage 7: Verify Deployment
+        // Stage 8: Verify Deployment
         // =====================================================================
         stage('Verify') {
             steps {
