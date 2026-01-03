@@ -91,7 +91,7 @@ pipeline {
                     ])
                     
                     // Set namespace based on environment
-                    env.NAMESPACE = params.ENVIRONMENT == 'prod' ? 'imeetpro-prod' : 'imeetpro-dev'
+                    env.NAMESPACE = params.ENVIRONMENT == 'prod' ? 'imeetpro' : 'imeetpro-dev'
                     
                     currentBuild.description = "Env: ${params.ENVIRONMENT}, NS: ${env.NAMESPACE}, Tag: ${IMAGE_TAG}"
                     echo "📍 Target Namespace: ${env.NAMESPACE}"
@@ -172,7 +172,7 @@ pipeline {
                             echo "🏗️  Tagging Backend image for Celery Worker..."
                             sh """
                                 docker tag ${BACKEND_REPO}:${IMAGE_TAG} ${CELERY_REPO}:${IMAGE_TAG}
-                                docker tag ${BACKEND_REPO}:latest ${CELERY_REPO}:lates
+                                docker tag ${BACKEND_REPO}:latest ${CELERY_REPO}:latest
                             """
                             echo "✅ Celery image ready!"
                         }
