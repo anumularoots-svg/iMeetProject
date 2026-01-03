@@ -992,7 +992,7 @@ function App() {
       );
       console.log(
         "API Base URL:",
-        import.meta.env.VITE_API_BASE_URL || "https://192.168.48.201:8111"
+        import.meta.env.VITE_API_BASE_URL || "https://api.lancieretech.com"
       );
       console.log("🎥 Camera Access Control: ENABLED");
       console.log("   ✅ Camera will ONLY activate in WaitingRoom/MeetingRoom");

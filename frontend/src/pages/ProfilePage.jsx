@@ -77,7 +77,7 @@ import ImageUpload from "../components/common/ImageUpload";
 import { useAuth } from "../hooks/useAuth";
 
 // ✅ API Configuration
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://192.168.48.201:8111';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.lancieretech.com';
 
 const ProfilePage = () => {
   const navigate = useNavigate();

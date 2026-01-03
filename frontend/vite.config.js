@@ -35,13 +35,13 @@ export default defineConfig({
     // ✅ Proxy remains unchanged
     proxy: {
       '/api': {
-        target: 'https://192.168.48.201:8111',
+        target: 'https://api.lancieretech.com',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, '/api')
       },
       '/wss': {
-        target: 'wss://192.168.48.201:8111',
+        target: 'wss://api.lancieretech.com',
         wss: true,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/wss/, '/wss')
