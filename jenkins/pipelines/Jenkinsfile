@@ -169,15 +169,12 @@ pipeline {
                     }
                     steps {
                         script {
-                            echo "🏗️ Building Celery Worker Docker image..."
+                            echo "🏗️  Tagging Backend image for Celery Worker..."
                             sh """
-                                docker build \
-                                    -t ${CELERY_REPO}:${IMAGE_TAG} \
-                                    -t ${CELERY_REPO}:latest \
-                                    -f jenkins/docker/Dockerfile.celery \
-                                    ./BackEnd
+                                docker tag ${BACKEND_REPO}:${IMAGE_TAG} ${CELERY_REPO}:${IMAGE_TAG}
+                                docker tag ${BACKEND_REPO}:latest ${CELERY_REPO}:lates
                             """
-                            echo "✅ Celery image built!"
+                            echo "✅ Celery image ready!""
                         }
                     }
                 }
