@@ -999,7 +999,7 @@ const verifyFace = async () => {
 
   // Auto-verify when camera is ready
   useEffect(() => {
-    if (user?.face_recognition_enabled && stream && videoEnabled && !autoVerifyAttempted && !faceVerified && mediaPermissionGranted && videoRef.current?.readyState >= 2) {
+    if (user?.face_recognition_enabled === true && stream && videoEnabled && !autoVerifyAttempted && !faceVerified && mediaPermissionGranted && videoRef.current?.readyState >= 2) {
       const timer = setTimeout(() => {
         setAutoVerifyAttempted(true);
         console.log('🤖 Auto-verifying face...');
@@ -1578,7 +1578,7 @@ useEffect(() => {
           <JoinButton
             fullWidth
             onClick={handleJoinMeeting}
-            disabled={isJoining || isConnecting || !displayName.trim() || isInitializing || (user?.face_recognition_enabled && !faceVerified)}
+            disabled={isJoining || isConnecting || !displayName.trim() || isInitializing || (user?.face_recognition_enabled === true && !faceVerified)}
             startIcon={
               (isJoining || isInitializing) && <CircularProgress size={20} color="inherit" />
             }
@@ -1588,7 +1588,7 @@ useEffect(() => {
               : isJoining
                 ? 'Joining...' 
                 : !faceVerified
-                  ? (user?.face_recognition_enabled ? 'Verify Face to Join' : 'Join Meeting Now')
+                  ? (user?.face_recognition_enabled === true ? 'Verify Face to Join' : 'Join Meeting Now')
                   : 'Join Meeting Now'
             }
           </JoinButton>
