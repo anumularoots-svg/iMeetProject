@@ -1034,7 +1034,8 @@ const verifyFace = async () => {
       return;
     }
 
-    if (!faceVerified) {
+    const userFaceAuthRequired = user?.face_recognition_enabled === true || user?.face_recognition_enabled === 1;
+    if (userFaceAuthRequired && !faceVerified) {
       setDeviceError('Face verification required to join');
       setShowFaceAuthDialog(true);
       return;
@@ -1577,7 +1578,7 @@ useEffect(() => {
           <JoinButton
             fullWidth
             onClick={handleJoinMeeting}
-            disabled={isJoining || isConnecting || !displayName.trim() || isInitializing || !faceVerified}
+            disabled={isJoining || isConnecting || !displayName.trim() || isInitializing || (user?.face_recognition_enabled && !faceVerified)}
             startIcon={
               (isJoining || isInitializing) && <CircularProgress size={20} color="inherit" />
             }
