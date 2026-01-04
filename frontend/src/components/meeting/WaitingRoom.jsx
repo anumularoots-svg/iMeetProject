@@ -999,7 +999,7 @@ const verifyFace = async () => {
 
   // Auto-verify when camera is ready
   useEffect(() => {
-    if (stream && videoEnabled && !autoVerifyAttempted && !faceVerified && mediaPermissionGranted && videoRef.current?.readyState >= 2) {
+    if (user?.face_recognition_enabled && stream && videoEnabled && !autoVerifyAttempted && !faceVerified && mediaPermissionGranted && videoRef.current?.readyState >= 2) {
       const timer = setTimeout(() => {
         setAutoVerifyAttempted(true);
         console.log('🤖 Auto-verifying face...');
@@ -1588,7 +1588,7 @@ useEffect(() => {
               : isJoining
                 ? 'Joining...' 
                 : !faceVerified
-                  ? 'Verify Face to Join'
+                  ? (user?.face_recognition_enabled ? 'Verify Face to Join' : 'Join Meeting Now')
                   : 'Join Meeting Now'
             }
           </JoinButton>
