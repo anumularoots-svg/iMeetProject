@@ -83,7 +83,7 @@ else:
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_REGION = os.getenv("AWS_REGION", "ap-south-1")
-AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "connectly-storage")
+AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "imeetpro-prod-recordings")
 
 # S3 Client
 s3_client = boto3.client(
@@ -327,7 +327,7 @@ mongo_user = os.getenv("MONGO_USER", "connectly")
 mongo_password = os.getenv("MONGO_PASSWORD", "password")
 mongo_host = os.getenv("MONGO_HOST", "192.168.48.201")
 mongo_port = os.getenv("MONGO_PORT", "27017")
-mongo_db = os.getenv("MONGO_DB", "connectlydb")
+mongo_db = os.getenv("MONGO_DB", "imeetpro")
 
 MONGO_URI = os.getenv("MONGO_URI")
 mongo_client = MongoClient(MONGO_URI)
