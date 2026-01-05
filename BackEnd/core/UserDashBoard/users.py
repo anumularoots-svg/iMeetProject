@@ -41,7 +41,7 @@ SERVER_ERROR_STATUS = 500
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_REGION = os.getenv("AWS_REGION", "ap-south-1")
-AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "connectly-storage")
+AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "imeetpro-prod-recordings")
 
 # S3 Folders
 S3_FOLDERS = {
@@ -80,7 +80,7 @@ s3_client = boto3.client(
 # MongoDB Configuration
 MONGO_URI = os.getenv("MONGO_URI")
 mongo_client = MongoClient(MONGO_URI)
-db = mongo_client[os.getenv("MONGO_DB", "connectlydb")]
+db = mongo_client[os.getenv("MONGO_DB", "imeetpro")]
 profile_photos_collection = db["profile_photos"]
 
 # Email configuration
