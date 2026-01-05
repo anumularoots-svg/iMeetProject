@@ -125,8 +125,8 @@ MONGO_USER = os.getenv("MONGO_USER", "connectly")
 MONGO_PASSWORD = os.getenv("MONGO_PASSWORD", "LT@connect25")
 MONGO_HOST = os.getenv("MONGO_HOST", "192.168.48.201")
 MONGO_PORT = os.getenv("MONGO_PORT", "27017")
-MONGO_DB = os.getenv("MONGO_DB", "connectlydb")
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://connectly:LT%40connect25@192.168.48.201:27017/connectlydb?authSource=admin")
+MONGO_DB = os.getenv("MONGO_DB", "imeetpro")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongodb.databases.svc.cluster.local:27017/imeetpro")
 
 logger.info(f"🔗 Connecting to MongoDB: {MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}")
 
