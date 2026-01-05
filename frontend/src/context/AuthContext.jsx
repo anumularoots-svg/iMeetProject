@@ -289,7 +289,7 @@ useEffect(() => {
       const loginData = { Credential: credentials.email, Password: credentials.password };
       const { data } = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.LOGIN}`, loginData);
 
-      const { Id } = data;
+      const Id = data.user?.id || data.Id;
 
       // create a mock token to keep your current token-based flow
       const mockToken = `session_${Id}_${Date.now()}`;
