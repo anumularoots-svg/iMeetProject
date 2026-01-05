@@ -1721,6 +1721,7 @@ def Get_User(request, id):
                 SELECT ID, full_name, email, phone_number, address, country, Status, status_Code,
                        country_code, languages, agreeToTerms, 
                        profile_photo_id, edited_photo_id, photo_code, face_embedding_id,
+                       face_recognition_enabled,
                        Created_At, Updated_At
                 FROM tbl_Users
                 WHERE ID = %s
@@ -1747,8 +1748,9 @@ def Get_User(request, id):
             'edited_photo_id': row[12],     # ✅ NEW
             'photo_code': row[13],          # ✅ NEW
             'face_embedding_id': row[14],   # ✅ NEW
-            'Created_At': row[15],
-            'Updated_At': row[16]
+            'face_recognition_enabled': bool(row[15]),
+            'Created_At': row[16],
+            'Updated_At': row[17]
         }
         return JsonResponse(user, status=SUCCESS_STATUS)
     logging.error(f"User ID {id} not found")
