@@ -1428,31 +1428,54 @@ def Login_User(request):
 
     try:
         with connection.cursor() as cursor:
+            # ✅ UPDATED: Fetch all user fields including face_recognition_enabled
             cursor.execute("""
-                SELECT ID, password, full_name
+                SELECT ID, password, full_name, email, phone_number, address, country,
+                       Status, status_Code, country_code, languages, agreeToTerms,
+                       profile_photo_id, edited_photo_id, photo_code, face_embedding_id,
+                       face_recognition_enabled, Created_At, Updated_At
                 FROM tbl_Users
                 WHERE (email = %s OR phone_number = %s) AND status_Code = 'u' AND Status = 1
             """, [credential, credential])
             row = cursor.fetchone()
             if row and row[1] == password:
                 user_id = row[0]
-                full_name = row[2]
                 request.session['User_Id'] = user_id
                 request.session['User_Type'] = 'user'
                 request.session.set_expiry(86400)
+                
+                # ✅ Return full user data including face_recognition_enabled
                 return JsonResponse({
                     "Message": "Login successful",
                     "Entity_Type": "user",
-                    "Id": user_id,
-                    "Name": full_name,
-                    "Session_Timeout": 86400
+                    "Session_Timeout": 86400,
+                    "user": {
+                        "id": row[0],
+                        "full_name": row[2],
+                        "email": row[3],
+                        "phone_number": row[4],
+                        "address": row[5],
+                        "country": row[6],
+                        "Status": row[7],
+                        "status_Code": row[8],
+                        "country_code": row[9],
+                        "languages": row[10],
+                        "agreeToTerms": row[11],
+                        "profile_photo_id": row[12],
+                        "edited_photo_id": row[13],
+                        "photo_code": row[14],
+                        "face_embedding_id": row[15],
+                        "face_recognition_enabled": bool(row[16]) if row[16] is not None else False,
+                        "Created_At": str(row[17]) if row[17] else None,
+                        "Updated_At": str(row[18]) if row[18] else None
+                    }
                 }, status=SUCCESS_STATUS)
             logging.error(f"Login failed for credential: {credential}")
             return JsonResponse({"Error": "Invalid credential or password, or user inactive"}, status=UNAUTHORIZED_STATUS)
     except (ProgrammingError, OperationalError) as e:
         logging.error(f"Database error: {e}")
         return JsonResponse({"Error": f"Database error: {str(e)}"}, status=SERVER_ERROR_STATUS)
-
+        
 @require_http_methods(["POST"])
 @csrf_exempt
 def Logout_User(request):
