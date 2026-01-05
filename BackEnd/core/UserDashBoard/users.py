@@ -79,6 +79,7 @@ s3_client = boto3.client(
 
 # MongoDB Configuration
 MONGO_URI = os.getenv("MONGO_URI")
+MONGO_DB = os.getenv("MONGO_DB", "connectlydb")
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client[os.getenv("MONGO_DB", "imeetpro")]
 profile_photos_collection = db["profile_photos"]
