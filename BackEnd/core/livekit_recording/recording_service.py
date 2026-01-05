@@ -33,7 +33,7 @@ import io
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_REGION = os.getenv("AWS_REGION", "ap-south-1")
-AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "connectly-storage")
+AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "imeetpro-prod-recordings")
 
 s3_client = boto3.client(
     "s3",
@@ -2005,9 +2005,9 @@ class FixedGoogleMeetRecorder:
         logger.info(f"🎬 FAST Video Target FPS: {self.target_fps}")
         logger.info(f"🔑 API Key: {self.api_key}")
         
-        mongo_uri = os.getenv("MONGO_URI", "mongodb://connectly:LT%40connect25@192.168.48.201:27017/connectlydb?authSource=admin")
+        mongo_uri = os.getenv("MONGO_URI", "mongodb://mongodb.databases.svc.cluster.local:27017/imeetpro")
         self.mongo_client = MongoClient(mongo_uri)
-        self.db = self.mongo_client[os.getenv("MONGO_DB", "connectlydb")]
+        self.db = self.mongo_client[os.getenv("MONGO_DB", "imeetpro")]
         self.collection = self.db["test"]
         
         self.s3_recordings_prefix = S3_FOLDERS['recordings_temp']
