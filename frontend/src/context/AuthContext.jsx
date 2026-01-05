@@ -208,7 +208,7 @@ const fetchUserFromDB = async (id) => {
     photo_code: photoCode,             // 0 = registration, 1 = edited
     photo_id: activePhotoId,           // Current active photo
     face_embedding_id: data.face_embedding_id || null,
-    
+    face_recognition_enabled: data.face_recognition_enabled || false,  // ✅ ADD THIS LINE
     created_at: data.Created_At,
     updated_at: data.Updated_At,
     name: data.full_name,
