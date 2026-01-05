@@ -415,20 +415,20 @@ class ProductionLiveKitService:
                     'roomList': permissions.get('roomList', False),
                     'roomRecord': permissions.get('roomRecord', False)
                 },
-                'roomConfig': {
-                    'audioEnabled': True,
-                    'videoEnabled': True,
-                    'autoSubscribe': True,
-                    'audioPriority': 'high',
-                    'adaptiveStream': True,
-                    'dynacast': True,
-                    'startAudioMuted': False,
-                    'startVideoMuted': False,
-                    'simulcast': True,
-                    'maxBitrate': 2000000,
-                    'preferredCodec': 'vp8',
-                    'enableRedundantEncoding': True
-                }
+               # 'roomConfig': {
+               #     'audioEnabled': True,
+               #   'videoEnabled': True,
+               #     'autoSubscribe': True,
+               #    'audioPriority': 'high',
+               #    'adaptiveStream': True,
+               #    'dynacast': True,
+               #    'startAudioMuted': False,
+               #    'startVideoMuted': False,
+               #    'simulcast': True,
+               #    'maxBitrate': 2000000,
+               #    'preferredCodec': 'vp8',
+               #    'enableRedundantEncoding': True
+               # }
             }
             
             enhanced_metadata = {
