@@ -38,3 +38,4 @@ data:
   
   # LiveKit Configuration
   LIVEKIT_URL: "wss://imeetpro-fbrcr2mk.livekit.cloud"
+  LIVEKIT_WSS_URL: "wss://imeetpro-fbrcr2mk.livekit.cloud"
