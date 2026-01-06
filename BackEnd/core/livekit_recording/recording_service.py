@@ -1516,7 +1516,7 @@ class FixedRecordingBot:
                 logger.error(f"❌ WSS connection failed: {e}")
                 logger.info("🔄 Trying direct HTTP fallback...")
                 
-                http_url = "ws://44.201.44.40:8880"
+                http_url = self.livekit_wss_url.replace("wss://", "ws://").replace("https://", "http://")
                 try:
                     await asyncio.wait_for(
                         self.room.connect(http_url, self.token),
@@ -1985,11 +1985,11 @@ class FixedGoogleMeetRecorder:
     
     def __init__(self):
         # CORRECTED: Use HTTPS URL for API calls, WSS for WebSocket
-        self.livekit_url = os.getenv("LIVEKIT_URL", "https://44.201.44.40:8881")
-        self.livekit_wss_url = os.getenv("LIVEKIT_WSS_URL", "wss://44.201.44.40:8881")
+        self.livekit_url = os.getenv("LIVEKIT_URL", "wss://imeetpro-fbrcr2mk.livekit.cloud")
+        self.livekit_wss_url = os.getenv("LIVEKIT_WSS_URL", "wss://imeetpro-fbrcr2mk.livekit.cloud")
         
         # Get API credentials from environment
-        self.api_key = os.getenv("LIVEKIT_API_KEY", "api_0582831c57af5e58e53234d700146c24")
+        self.api_key = os.getenv("LIVEKIT_API_KEY", "")
         self.api_secret = os.getenv("LIVEKIT_API_SECRET", "ee6b633f7a8eeaaf640a1d6f673d1238dcb0a5645ef9886e34709666a1800788")
         
         # 🎬 FAST VIDEO SETTINGS
