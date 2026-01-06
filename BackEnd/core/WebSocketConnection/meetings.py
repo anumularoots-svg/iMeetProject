@@ -672,7 +672,8 @@ class ProductionLiveKitService:
                 
                 room_token = self.generate_room_specific_token(room_name)
                 
-                url = f"{self.config['url']}/twirp/livekit.RoomService/ListParticipants"
+                api_url = self.config['url'].replace('wss://', 'https://').replace('ws://', 'http://')
+                url = f"{api_url}/twirp/livekit.RoomService/ListParticipants"
                 
                 headers = {
                     'Authorization': f'Bearer {room_token}',
