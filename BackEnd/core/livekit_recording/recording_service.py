@@ -2130,7 +2130,7 @@ class FixedGoogleMeetRecorder:
             }
 
     def _start_fast_recording(self, room_name: str, meeting_id: str, host_user_id: str,
-                           recording_doc_id: str, recorder_identity: str) -> Tuple[bool, Optional[str]]:
+                           recording_doc_id: str, recorder_identity: str) -> Tuple[bool, Optional[str], Optional[object]]:
         """Start FAST recording process with proper bot instance storage"""
         try:
             recorder_token = self.generate_recorder_token(room_name, recorder_identity)
@@ -2184,13 +2184,13 @@ class FixedGoogleMeetRecorder:
             except queue.Empty:
                 stop_event.set()
                 logger.error("Recording connection timeout")
-                return False, "FAST recording connection timeout"
+                return False, "FAST recording connection timeout", None
                     
         except Exception as e:
             logger.error(f"❌ Error starting FAST recording: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            return False, str(e)
+            return False, str(e), None
 
     def _run_fast_recording_task(self, room_url: str, token: str, room_name: str,
                               meeting_id: str, result_queue: queue.Queue, 
