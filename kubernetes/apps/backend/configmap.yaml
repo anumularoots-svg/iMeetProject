@@ -11,6 +11,9 @@ data:
   DEBUG: "False"
   DJANGO_SETTINGS_MODULE: "config.settings.production"
   ALLOWED_HOSTS: "*"
+  CACHE_CHAT_HOST: "redis.databases.svc.cluster.local"
+  CACHE_HAND_RAISE_HOST: "redis.databases.svc.cluster.local"
+  DEFAULT_REDIS_HOST: "redis.databases.svc.cluster.local"
   
   # MySQL Database (AWS RDS)
   DB_HOST: "imeetpro-prod-mysql.c7ae8ge8ixhl.ap-south-1.rds.amazonaws.com"
@@ -35,9 +38,3 @@ data:
   
   # LiveKit Configuration
   LIVEKIT_URL: "wss://imeetpro-fbrcr2mk.livekit.cloud"
-
-  data:
-  # ... existing ...
-  CACHE_CHAT_HOST: "redis.databases.svc.cluster.local"
-  CACHE_HAND_RAISE_HOST: "redis.databases.svc.cluster.local"
-  DEFAULT_REDIS_HOST: "redis.databases.svc.cluster.local"
