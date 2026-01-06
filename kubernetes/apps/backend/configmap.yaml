@@ -35,3 +35,9 @@ data:
   
   # LiveKit Configuration
   LIVEKIT_URL: "wss://imeetpro-fbrcr2mk.livekit.cloud"
+
+  data:
+  # ... existing ...
+  CACHE_CHAT_HOST: "redis.databases.svc.cluster.local"
+  CACHE_HAND_RAISE_HOST: "redis.databases.svc.cluster.local"
+  DEFAULT_REDIS_HOST: "redis.databases.svc.cluster.local"
