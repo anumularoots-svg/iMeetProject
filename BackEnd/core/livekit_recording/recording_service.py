@@ -1990,7 +1990,7 @@ class FixedGoogleMeetRecorder:
         
         # Get API credentials from environment
         self.api_key = os.getenv("LIVEKIT_API_KEY", "")
-        self.api_secret = os.getenv("LIVEKIT_API_SECRET", "ee6b633f7a8eeaaf640a1d6f673d1238dcb0a5645ef9886e34709666a1800788")
+        self.api_secret = os.getenv("LIVEKIT_API_SECRET", "")
         
         # 🎬 FAST VIDEO SETTINGS
         self.target_fps = int(os.getenv("FAST_VIDEO_FPS", "20"))  # Configurable target FPS
