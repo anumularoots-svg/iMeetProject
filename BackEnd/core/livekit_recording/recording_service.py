@@ -775,6 +775,31 @@ class StreamingRecordingWithChunks:
             self.active_audio_tracks = {}
         
         logger.info("⏹️ Recording stopped")
+            try:
+            from core.livekit_recording.recording_service import stream_recording_service
+            logger.info("🎬 Triggering post-recording processing pipeline...")
+            
+            # Safely extract required fields if available
+            meeting_id = getattr(self, "meeting_id", None)
+            user_id = getattr(self, "user_id", None)
+            recording_doc_id = getattr(self, "recording_doc_id", None)
+            final_video_path = getattr(self, "final_video_path", None)
+
+            if meeting_id and user_id and final_video_path:
+                stream_recording_service._trigger_processing_pipeline(
+                    video_file_path=final_video_path,
+                    meeting_id=meeting_id,
+                    host_user_id=user_id,
+                    recording_doc_id=recording_doc_id or ""
+                )
+                logger.info(f"✅ Processing pipeline dispatched for meeting={meeting_id}")
+            else:
+                logger.warning("⚠️ Missing metadata: skipping processing trigger")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to trigger post-recording processing: {e}")
+
+    
 
 
     def add_video_frame(self, frame, source_type="video", timestamp_override=None):
