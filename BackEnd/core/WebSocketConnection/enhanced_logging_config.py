@@ -93,7 +93,7 @@ class LogInterceptor:
                 target_files = [
                     'meetings.py', 'participants.py', 
                     'chat_messages.py', 'cache_only_hand_raise.py',
-                    'recording_service.py', 'Attendance.py', 'notifications.py'  # ✅ ADDED
+                    'Attendance.py', 'notifications.py'  # ✅ ADDED
                 ]
                 if filename in target_files:
                     return filename
@@ -295,24 +295,24 @@ def setup_complete_logging():
     # RECORDING SERVICE MODULE LOGGER
     # ============================================
     
-    recording_service_logger = logging.getLogger('recording_service_module')
-    recording_service_logger.setLevel(logging.DEBUG)
-    recording_service_logger.propagate = False
+    # recording_service_logger = logging.getLogger('recording_service_module')
+    # recording_service_logger.setLevel(logging.DEBUG)
+    # recording_service_logger.propagate = False
     
-    # Recording service file handler
-    recording_service_handler = logging.handlers.RotatingFileHandler(
-        'logs/recording_service_module.log',
-        maxBytes=20*1024*1024,  # 20MB (larger for video processing logs)
-        backupCount=5,
-        encoding='utf-8'
-    )
-    recording_service_handler.setLevel(logging.DEBUG)
+    # # Recording service file handler
+    # recording_service_handler = logging.handlers.RotatingFileHandler(
+    #     'logs/recording_service_module.log',
+    #     maxBytes=20*1024*1024,  # 20MB (larger for video processing logs)
+    #     backupCount=5,
+    #     encoding='utf-8'
+    # )
+    # recording_service_handler.setLevel(logging.DEBUG)
     
-    recording_service_formatter = logging.Formatter(
-        '%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d - %(message)s'
-    )
-    recording_service_handler.setFormatter(recording_service_formatter)
-    recording_service_logger.addHandler(recording_service_handler)
+    # recording_service_formatter = logging.Formatter(
+    #     '%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d - %(message)s'
+    # )
+    # recording_service_handler.setFormatter(recording_service_formatter)
+    # recording_service_logger.addHandler(recording_service_handler)
     
     # ============================================
     # ATTENDANCE MODULE LOGGER
@@ -442,23 +442,23 @@ def setup_complete_logging():
     cache_hand_raise_api_handler.setFormatter(cache_hand_raise_api_formatter)
     cache_hand_raise_api_logger.addHandler(cache_hand_raise_api_handler)
     
-    # Recording Service API logger
-    recording_service_api_logger = logging.getLogger('recording_service_api')
-    recording_service_api_logger.setLevel(logging.INFO)
-    recording_service_api_logger.propagate = False
+    # # Recording Service API logger
+    # recording_service_api_logger = logging.getLogger('recording_service_api')
+    # recording_service_api_logger.setLevel(logging.INFO)
+    # recording_service_api_logger.propagate = False
     
-    recording_service_api_handler = logging.handlers.RotatingFileHandler(
-        'recording_service_debug.log',
-        maxBytes=25*1024*1024,  # 25MB
-        backupCount=3,
-        encoding='utf-8'
-    )
-    recording_service_api_handler.setLevel(logging.INFO)
-    recording_service_api_formatter = logging.Formatter(
-        '%(asctime)s %(levelname)s [RECORDING-SERVICE-API] %(message)s'
-    )
-    recording_service_api_handler.setFormatter(recording_service_api_formatter)
-    recording_service_api_logger.addHandler(recording_service_api_handler)
+    # recording_service_api_handler = logging.handlers.RotatingFileHandler(
+    #     'recording_service_debug.log',
+    #     maxBytes=25*1024*1024,  # 25MB
+    #     backupCount=3,
+    #     encoding='utf-8'
+    # )
+    # recording_service_api_handler.setLevel(logging.INFO)
+    # recording_service_api_formatter = logging.Formatter(
+    #     '%(asctime)s %(levelname)s [RECORDING-SERVICE-API] %(message)s'
+    # )
+    # recording_service_api_handler.setFormatter(recording_service_api_formatter)
+    # recording_service_api_logger.addHandler(recording_service_api_handler)
     
     # Attendance API logger
     attendance_api_logger = logging.getLogger('attendance_api')
@@ -548,7 +548,7 @@ def setup_complete_logging():
     print(f"📝 Participants API: participants_debug.log")
     print(f"📝 Cache Chat API: cache_chat_debug.log")
     print(f"📝 Cache Hand Raise API: cache_hand_raise_debug.log")
-    print(f"📝 Recording Service API: recording_service_debug.log")
+    # print(f"📝 Recording Service API: recording_service_debug.log")
     print(f"📝 Attendance API: attendance_debug.log")
     print(f"📝 Notifications API: notifications_debug.log")  # ✅ ADDED
     print(f"📝 Console: Critical errors only")
@@ -582,7 +582,7 @@ def configure_enhanced_logging():
         participants_logger.info("✅ Enhanced participants logging active")
         cache_chat_logger.info("✅ Enhanced cache chat logging active")
         cache_hand_raise_logger.info("✅ Enhanced cache hand raise logging active")
-        recording_service_logger.info("✅ Enhanced recording service logging active")
+        # recording_service_logger.info("✅ Enhanced recording service logging active")
         attendance_logger.info("✅ Enhanced attendance logging active")
         notifications_logger.info("✅ Enhanced notifications logging active")  # ✅ ADDED
         
@@ -616,10 +616,10 @@ def log_cache_hand_raise_activity(message):
     logger = logging.getLogger('cache_hand_raise_module')
     logger.info(f"[CACHE-HAND-RAISE] {message}")
 
-def log_recording_service_activity(message):
-    """Log recording service-specific activity"""
-    logger = logging.getLogger('recording_service_module')
-    logger.info(f"[RECORDING-SERVICE] {message}")
+# def log_recording_service_activity(message):
+#     """Log recording service-specific activity"""
+#     logger = logging.getLogger('recording_service_module')
+#     logger.info(f"[RECORDING-SERVICE] {message}")
 
 def log_attendance_activity(message):
     """Log attendance-specific activity"""
@@ -638,7 +638,7 @@ def log_api_activity(module, endpoint, method, status_code, **kwargs):
         'participants': logging.getLogger('participants_api'),
         'cache_chat': logging.getLogger('cache_chat_api'),
         'cache_hand_raise': logging.getLogger('cache_hand_raise_api'),
-        'recording_service': logging.getLogger('recording_service_api'),
+        # 'recording_service': logging.getLogger('recording_service_api'),
         'attendance': logging.getLogger('attendance_api'),
         'notifications': logging.getLogger('notifications_api')  # ✅ ADDED
     }
@@ -728,12 +728,12 @@ def test_logging():
     cache_hand_raise_logger.warning("Warning message from cache hand raise")
     cache_hand_raise_logger.error("Error message from cache hand raise")
     
-    # Test recording service logger
-    recording_service_logger = logging.getLogger('recording_service_module')
-    recording_service_logger.debug("Debug message from recording service")
-    recording_service_logger.info("Info message from recording service")
-    recording_service_logger.warning("Warning message from recording service")
-    recording_service_logger.error("Error message from recording service")
+    # # Test recording service logger
+    # recording_service_logger = logging.getLogger('recording_service_module')
+    # recording_service_logger.debug("Debug message from recording service")
+    # recording_service_logger.info("Info message from recording service")
+    # recording_service_logger.warning("Warning message from recording service")
+    # recording_service_logger.error("Error message from recording service")
     
     # Test attendance logger
     attendance_logger = logging.getLogger('attendance_module')
@@ -754,9 +754,9 @@ def test_logging():
     log_api_activity('participants', 'test_endpoint', 'GET', 200, execution_time=0.3)
     log_api_activity('cache_chat', 'send_message', 'POST', 200, execution_time=0.2, file_size='5MB')
     log_api_activity('cache_hand_raise', 'raise_hand', 'POST', 200, execution_time=0.1, redis_status='connected')
-    log_api_activity('recording_service', 'start_recording', 'POST', 200, 
-                    execution_time=2.5, meeting_id='test123', frames_captured=1500, 
-                    audio_samples=48000, recording_status='active')
+    # log_api_activity('recording_service', 'start_recording', 'POST', 200, 
+    #                 execution_time=2.5, meeting_id='test123', frames_captured=1500, 
+    #                 audio_samples=48000, recording_status='active')
     log_api_activity('attendance', 'detect_violations', 'POST', 200,
                     execution_time=0.3, meeting_id='test123', user_id='user456',
                     violation_type='Eyes closed', warnings=2, detections=0,
@@ -801,14 +801,14 @@ def get_log_file_paths():
         'participants_module': 'logs/participants_module.log',
         'cache_chat_module': 'logs/cache_chat_module.log',
         'cache_hand_raise_module': 'logs/cache_hand_raise_module.log',
-        'recording_service_module': 'logs/recording_service_module.log',
+        # 'recording_service_module': 'logs/recording_service_module.log',
         'attendance_module': 'logs/attendance_module.log',
         'notifications_module': 'logs/notifications_module.log',  # ✅ ADDED
         'meetings_api': 'meetings_debug.log',
         'participants_api': 'participants_debug.log',
         'cache_chat_api': 'cache_chat_debug.log',
         'cache_hand_raise_api': 'cache_hand_raise_debug.log',
-        'recording_service_api': 'recording_service_debug.log',
+        # 'recording_service_api': 'recording_service_debug.log',
         'attendance_api': 'attendance_debug.log',
         'notifications_api': 'notifications_debug.log'  # ✅ ADDED
     }
