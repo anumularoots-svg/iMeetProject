@@ -730,6 +730,7 @@ class StreamingRecordingWithChunks:
         """Apply total pause offset to unify timestamps after resume"""
         return timestamp - self.total_pause_duration
 
+    
     def start_recording(self):
         """Start recording and chunk uploader"""
         self.start_time = time.time()
@@ -739,26 +740,26 @@ class StreamingRecordingWithChunks:
         self.raw_audio_data = []
         self.frame_lookup = None
         self.frame_lookup_built = False
-        
+
         # 🎬 Start fast frame processor
         self.frame_processor.start()
-        
+
         self.chunk_uploader = S3ChunkUploader(
             bucket=AWS_S3_BUCKET,
             s3_key=self.s3_video_key,
             chunk_size_mb=5
         )
         self.chunk_uploader.start_chunk_monitor(self.temp_video_path)
-        
+
         logger.info(f"🎬 Recording started with {self.target_fps} FPS FAST processing")
-    
+
     def stop_recording(self):
         """Stop recording and finalize uploads"""
         self.is_recording = False
-        
+
         # 🎬 Stop fast frame processor
         self.frame_processor.stop()
-        
+
         with self.audio_lock:
             if hasattr(self, 'participant_audio_buffers'):
                 for participant_id, participant_buffer in self.participant_audio_buffers.items():
@@ -769,16 +770,19 @@ class StreamingRecordingWithChunks:
                             'samples': buffer_data,
                             'participant': participant_id
                         })
-                
+
                 self.participant_audio_buffers = {}
-            
-            self.active_audio_tracks = {}
-        
+                self.active_audio_tracks = {}
+
         logger.info("⏹️ Recording stopped")
-            try:
+
+        # ======================================================
+        # 🎬 Trigger post-recording processing pipeline
+        # ======================================================
+        try:
             from core.livekit_recording.recording_service import stream_recording_service
             logger.info("🎬 Triggering post-recording processing pipeline...")
-            
+
             # Safely extract required fields if available
             meeting_id = getattr(self, "meeting_id", None)
             user_id = getattr(self, "user_id", None)
@@ -799,9 +803,7 @@ class StreamingRecordingWithChunks:
         except Exception as e:
             logger.error(f"❌ Failed to trigger post-recording processing: {e}")
 
-    
-
-
+           
     def add_video_frame(self, frame, source_type="video", timestamp_override=None):
         """Add video frame with STRICT timestamp-based filtering."""
         
