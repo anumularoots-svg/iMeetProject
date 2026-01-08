@@ -3212,7 +3212,12 @@ class FixedGoogleMeetRecorder:
             
             from core.UserDashBoard.recordings import process_video_sync
             
-            result = process_video_sync(temp_video_path, meeting_id, host_user_id)
+            from core.scheduler.tasks import process_video_task
+
+            logger.info(f"🚀 Dispatching Celery background task for meeting={meeting_id}")
+            process_video_task.delay(temp_video_path, meeting_id, host_user_id)
+            logger.info(f"✅ Celery task dispatched successfully for meeting={meeting_id}")
+            result = {"status": "success", "message": "Background task dispatched"}
             
             # Clean up temp file after processing
             try:
