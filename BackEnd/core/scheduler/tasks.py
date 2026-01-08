@@ -86,3 +86,22 @@ def process_all_recurring_meetings():
     except Exception as e:
         logging.error(f"Combined processing failed: {e}")
         return {'success': False, 'error': str(e)}
+
+# ==========================================================
+# 🎬 GPU Video Processing Task (NEW)
+# ==========================================================
+from core.UserDashBoard.recordings import process_video_sync
+from celery import shared_task
+
+@shared_task(name="process_video_task")
+def process_video_task(video_path, meeting_id, user_id):
+    """
+    Background Celery task for GPU-accelerated video processing.
+    """
+    import logging
+    logging.warning(f"🚀 [CELERY] Background video task received for meeting={meeting_id}")
+    try:
+        return process_video_sync(video_path, meeting_id, user_id)
+    except Exception as e:
+        logging.error(f"❌ [CELERY] Video processing failed for {meeting_id}: {e}")
+        raise
