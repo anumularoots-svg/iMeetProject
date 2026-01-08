@@ -33,8 +33,8 @@ import io
 # Configure S3
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "connectly-storage")
+AWS_REGION = os.getenv("AWS_REGION", "ap-south-1")
+AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "imeetpro-prod-recordings")
 
 s3_client = boto3.client(
     "s3",
@@ -1544,7 +1544,7 @@ class FixedRecordingBot:
                 logger.error(f"❌ WSS connection failed: {e}")
                 logger.info("🔄 Trying direct HTTP fallback...")
                 
-                http_url = "ws://192.168.48.201:8880"
+                http_url = self.livekit_wss_url.replace("wss://", "ws://").replace("https://", "http://")
                 try:
                     await asyncio.wait_for(
                         self.room.connect(http_url, self.token),
@@ -2013,13 +2013,13 @@ class FixedGoogleMeetRecorder:
     
     def __init__(self):
         # CORRECTED: Use HTTPS URL for API calls, WSS for WebSocket
-        self.livekit_url = os.getenv("LIVEKIT_URL", "https://192.168.48.201:8881")
-        self.livekit_wss_url = os.getenv("LIVEKIT_WSS_URL", "wss://192.168.48.201:8881")
+        self.livekit_url = os.getenv("LIVEKIT_URL", "wss://imeetpro-fbrcr2mk.livekit.cloud")
+        self.livekit_wss_url = os.getenv("LIVEKIT_WSS_URL", "wss://imeetpro-fbrcr2mk.livekit.cloud")
         
         # Get API credentials from environment
-        self.api_key = os.getenv("LIVEKIT_API_KEY", "sridhar_ec9969265170a7d374da49d6b55f8ff4")
-        self.api_secret = os.getenv("LIVEKIT_API_SECRET", "409150d1e2f40c1ebfcdd414c9c7b25c662d3770c08c1a6a945db8209ebfff3c")
-        
+        self.api_key = os.getenv("LIVEKIT_API_KEY", "")
+        self.api_secret = os.getenv("LIVEKIT_API_SECRET", "")
+
         # 🎬 FAST VIDEO SETTINGS
         self.target_fps = int(os.getenv("FAST_VIDEO_FPS", "20"))  # Configurable target FPS
         
@@ -2033,9 +2033,9 @@ class FixedGoogleMeetRecorder:
         logger.info(f"🎬 FAST Video Target FPS: {self.target_fps}")
         logger.info(f"🔑 API Key: {self.api_key}")
         
-        mongo_uri = os.getenv("MONGO_URI", "mongodb://connectly:LT%40connect25@192.168.48.201:27017/connectlydb?authSource=admin")
+        mongo_uri = os.getenv("MONGO_URI", "mongodb://mongodb.databases.svc.cluster.local:27017/imeetpro")
         self.mongo_client = MongoClient(mongo_uri)
-        self.db = self.mongo_client[os.getenv("MONGO_DB", "connectlydb")]
+        self.db = self.mongo_client[os.getenv("MONGO_DB", "imeetpro")]  
         self.collection = self.db["test"]
         
         self.s3_recordings_prefix = S3_FOLDERS['recordings_temp']
@@ -2288,7 +2288,7 @@ class FixedGoogleMeetRecorder:
             }
 
     def _start_fast_recording(self, room_name: str, meeting_id: str, host_user_id: str,
-                           recording_doc_id: str, recorder_identity: str) -> Tuple[bool, Optional[str]]:
+                           recording_doc_id: str, recorder_identity: str) -> Tuple[bool, Optional[str], Optional[object]]:
         """Start FAST recording process with proper bot instance storage"""
         try:
             recorder_token = self.generate_recorder_token(room_name, recorder_identity)
@@ -2343,13 +2343,13 @@ class FixedGoogleMeetRecorder:
             except queue.Empty:
                 stop_event.set()
                 logger.error("Recording connection timeout")
-                return False, "FAST recording connection timeout"
+                return False, "FAST recording connection timeout", None
                     
         except Exception as e:
             logger.error(f"❌ Error starting FAST recording: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            return False, str(e)
+            return False, str(e), None
 
     def _run_fast_recording_task(self, room_url: str, token: str, room_name: str,
                               meeting_id: str, result_queue: queue.Queue, 
