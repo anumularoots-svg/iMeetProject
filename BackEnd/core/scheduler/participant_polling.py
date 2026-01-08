@@ -34,7 +34,7 @@ def sync_participants_polling():
     4. Your API functions will handle duration calculation
     """
     try:
-        logger.info("🔄 [POLLING-10s] Starting participant sync cycle...")
+        # logger.info("🔄 [POLLING-10s] Starting participant sync cycle...")
         
         sync_results = {
             'meetings_checked': 0,
@@ -57,7 +57,7 @@ def sync_participants_polling():
             active_meetings = cursor.fetchall()
             sync_results['meetings_checked'] = len(active_meetings)
             
-            logger.info(f"[POLLING] Found {len(active_meetings)} active meetings to check")
+            # logger.info(f"[POLLING] Found {len(active_meetings)} active meetings to check")
             
             # ===== STEP 2: FOR EACH MEETING, CHECK PARTICIPANTS =====
             for meeting_id, room_name, meeting_status in active_meetings:
@@ -67,7 +67,7 @@ def sync_participants_polling():
                         livekit_participants = livekit_service.list_participants(room_name)
                         livekit_identities = {p['identity'] for p in livekit_participants}
                         
-                        logger.info(f"[POLLING] Meeting {meeting_id}: LiveKit has {len(livekit_identities)} participants")
+                        # logger.info(f"[POLLING] Meeting {meeting_id}: LiveKit has {len(livekit_identities)} participants")
                     except Exception as lk_error:
                         logger.warning(f"[POLLING] Could not fetch from LiveKit for meeting {meeting_id}: {lk_error}")
                         continue
@@ -82,7 +82,7 @@ def sync_participants_polling():
                     db_participants = cursor.fetchall()
                     sync_results['participants_checked'] += len(db_participants)
                     
-                    logger.info(f"[POLLING] Meeting {meeting_id}: DB has {len(db_participants)} active participants")
+                    # logger.info(f"[POLLING] Meeting {meeting_id}: DB has {len(db_participants)} active participants")
                     
                     # ===== C: FIND WHO IS MISSING FROM LIVEKIT =====
                     for participant_row in db_participants:
@@ -104,7 +104,7 @@ def sync_participants_polling():
                         
                         if not is_still_in_livekit:
                             # ===== THIS USER DISCONNECTED =====
-                            logger.info(f"[POLLING] ❌ User {user_id} in DB but NOT in LiveKit - marking as left")
+                            # logger.info(f"[POLLING] ❌ User {user_id} in DB but NOT in LiveKit - marking as left")
                             
                             try:
                                 _mark_participant_as_left(
@@ -124,13 +124,13 @@ def sync_participants_polling():
                     sync_results['errors'].append(f"Meeting {meeting_id}: {str(meeting_error)}")
                     continue
         
-        logger.info(f"""
-✅ [POLLING] Sync cycle completed:
-   - Meetings checked: {sync_results['meetings_checked']}
-   - Participants checked: {sync_results['participants_checked']}
-   - Marked as left: {sync_results['participants_marked_left']}
-   - Errors: {len(sync_results['errors'])}
-        """)
+#         logger.info(f"""
+# ✅ [POLLING] Sync cycle completed:
+#    - Meetings checked: {sync_results['meetings_checked']}
+#    - Participants checked: {sync_results['participants_checked']}
+#    - Marked as left: {sync_results['participants_marked_left']}
+#    - Errors: {len(sync_results['errors'])}
+#         """)
         
         return sync_results
         
@@ -183,8 +183,8 @@ def _mark_participant_as_left(cursor, participant_id, user_id, leave_times_json)
             participant_id
         ])
         
-        logger.info(f"✅ [POLLING] User {user_id} marked as left - Leave_Times stored in database")
-        logger.info(f"   Leave time: {leave_time_str}")
+        # logger.info(f"✅ [POLLING] User {user_id} marked as left - Leave_Times stored in database")
+        # logger.info(f"   Leave time: {leave_time_str}")
     
     else:
         logger.info(f"[POLLING] Leave time already recorded for user {user_id}")
