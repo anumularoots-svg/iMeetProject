@@ -756,8 +756,31 @@ class StreamingRecordingWithChunks:
             chunk_size_mb=5
         )
         self.chunk_uploader.start_chunk_monitor(self.temp_video_path)
-
-        logger.info(f"🎬 Recording started with {self.target_fps} FPS FAST processing")
+        # 🔥 FIX: Start FFmpeg process for real-time encoding
+        ffmpeg_cmd = [
+            'ffmpeg', '-y',
+            '-f', 'rawvideo',
+            '-vcodec', 'rawvideo',
+            '-pix_fmt', 'bgr24',
+            '-s', '1280x720',
+            '-r', str(self.target_fps),
+            '-i', '-',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', '23',
+            '-pix_fmt', 'yuv420p',
+            '-f', 'avi',
+            self.temp_video_path
+        ]
+        self.ffmpeg_process = subprocess.Popen(
+            ffmpeg_cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=10485760
+        )
+        self.frames_written = 0
+        logger.info(f"🎬 Recording started with {self.target_fps} FPS FAST processing + real-time encoding") 
 
     def stop_recording(self):
         """Stop recording and finalize uploads"""
@@ -765,6 +788,23 @@ class StreamingRecordingWithChunks:
 
         # 🎬 Stop fast frame processor
         self.frame_processor.stop()
+
+        # 🔥 FIX: Close FFmpeg process properly
+        if hasattr(self, 'ffmpeg_process') and self.ffmpeg_process:
+           try:
+            logger.info(f"🔚 Closing FFmpeg stdin... Frames written: {getattr(self, 'frames_written', 0)}")
+            self.ffmpeg_process.stdin.close()
+            return_code = self.ffmpeg_process.wait(timeout=120)
+            if return_code == 0:
+                logger.info(f"✅ FFmpeg encoding completed successfully")
+            else:
+                stderr = self.ffmpeg_process.stderr.read().decode('utf-8', errors='ignore')
+                logger.error(f"❌ FFmpeg exited with code {return_code}: {stderr[-500:]}")
+        except Exception as e:
+            logger.warning(f"FFmpeg close error: {e}")
+            if self.ffmpeg_process.poll() is None:
+                self.ffmpeg_process.kill()
+                self.ffmpeg_process.wait()
 
         with self.audio_lock:
             if hasattr(self, 'participant_audio_buffers'):
@@ -834,18 +874,27 @@ class StreamingRecordingWithChunks:
             timestamp = time.perf_counter() - self.start_perf_counter
         
         with self.frame_lock:
-            class TimestampedFrame:
-                def __init__(self, frame, timestamp, source_type="placeholder"):
-                    self.frame = frame
-                    self.timestamp = timestamp
-                    self.source_type = source_type
-                    self.capture_time = time.perf_counter()
-            
-            timestamped_frame = TimestampedFrame(frame, timestamp, source_type)
-            self.video_frames.append(timestamped_frame)
-            
-            if source_type in ["video", "screen_share"] and frame is not None:
-                self.current_screen_frame = frame.copy()
+        # 🔥 FIX: Write directly to FFmpeg instead of storing in memory
+        if hasattr(self, 'ffmpeg_process') and self.ffmpeg_process and self.ffmpeg_process.poll() is None:
+            try:
+                write_frame = frame
+                if frame.shape[:2] != (720, 1280):
+                    write_frame = cv2.resize(frame, (1280, 720))
+                self.ffmpeg_process.stdin.write(write_frame.tobytes())
+                self.frames_written = getattr(self, 'frames_written', 0) + 1
+                
+                # Log progress every 100 frames
+                if self.frames_written % 100 == 0:
+                    logger.info(f"📹 Frames written to FFmpeg: {self.frames_written}")
+            except Exception as e:
+                logger.warning(f"FFmpeg write error: {e}")
+        
+        # Store current frame reference for screen share display (not the data)
+        if source_type in ["video", "screen_share"] and frame is not None:
+            self.current_screen_frame = frame.copy()
+        
+        # Store only timestamp for audio sync (no frame data!)
+        self.last_frame_timestamp = timestamp
 
     def add_audio_samples(self, samples, participant_id="unknown", track_id=None, track_source=None):
         """
