@@ -791,20 +791,20 @@ class StreamingRecordingWithChunks:
 
         # 🔥 FIX: Close FFmpeg process properly
         if hasattr(self, 'ffmpeg_process') and self.ffmpeg_process:
-           try:
-            logger.info(f"🔚 Closing FFmpeg stdin... Frames written: {getattr(self, 'frames_written', 0)}")
-            self.ffmpeg_process.stdin.close()
-            return_code = self.ffmpeg_process.wait(timeout=120)
-            if return_code == 0:
-                logger.info(f"✅ FFmpeg encoding completed successfully")
-            else:
-                stderr = self.ffmpeg_process.stderr.read().decode('utf-8', errors='ignore')
-                logger.error(f"❌ FFmpeg exited with code {return_code}: {stderr[-500:]}")
-        except Exception as e:
-            logger.warning(f"FFmpeg close error: {e}")
-            if self.ffmpeg_process.poll() is None:
-                self.ffmpeg_process.kill()
-                self.ffmpeg_process.wait()
+            try:
+                logger.info(f"🔚 Closing FFmpeg stdin... Frames written: {getattr(self, 'frames_written', 0)}")
+                self.ffmpeg_process.stdin.close()
+                return_code = self.ffmpeg_process.wait(timeout=120)
+                if return_code == 0:
+                    logger.info(f"✅ FFmpeg encoding completed successfully")
+                else:
+                    stderr = self.ffmpeg_process.stderr.read().decode('utf-8', errors='ignore')
+                    logger.error(f"❌ FFmpeg exited with code {return_code}: {stderr[-500:]}")
+            except Exception as e:
+                logger.warning(f"FFmpeg close error: {e}")
+                if self.ffmpeg_process.poll() is None:
+                    self.ffmpeg_process.kill()
+                    self.ffmpeg_process.wait()
 
         with self.audio_lock:
             if hasattr(self, 'participant_audio_buffers'):
@@ -874,27 +874,27 @@ class StreamingRecordingWithChunks:
             timestamp = time.perf_counter() - self.start_perf_counter
         
         with self.frame_lock:
-        # 🔥 FIX: Write directly to FFmpeg instead of storing in memory
-        if hasattr(self, 'ffmpeg_process') and self.ffmpeg_process and self.ffmpeg_process.poll() is None:
-            try:
-                write_frame = frame
-                if frame.shape[:2] != (720, 1280):
-                    write_frame = cv2.resize(frame, (1280, 720))
-                self.ffmpeg_process.stdin.write(write_frame.tobytes())
-                self.frames_written = getattr(self, 'frames_written', 0) + 1
-                
-                # Log progress every 100 frames
-                if self.frames_written % 100 == 0:
-                    logger.info(f"📹 Frames written to FFmpeg: {self.frames_written}")
-            except Exception as e:
-                logger.warning(f"FFmpeg write error: {e}")
+             # 🔥 FIX: Write directly to FFmpeg instead of storing in memory
+             if hasattr(self, 'ffmpeg_process') and self.ffmpeg_process and self.ffmpeg_process.poll() is None:
+                 try:
+                     write_frame = frame
+                     if frame.shape[:2] != (720, 1280):
+                         write_frame = cv2.resize(frame, (1280, 720))
+                     self.ffmpeg_process.stdin.write(write_frame.tobytes())
+                     self.frames_written = getattr(self, 'frames_written', 0) + 1
+
+                     # Log progress every 100 frames
+                     if self.frames_written % 100 == 0:
+                         logger.info(f"📹 Frames written to FFmpeg: {self.frames_written}")
+                 except Exception as e:
+                     logger.warning(f"FFmpeg write error: {e}")
         
-        # Store current frame reference for screen share display (not the data)
-        if source_type in ["video", "screen_share"] and frame is not None:
-            self.current_screen_frame = frame.copy()
-        
-        # Store only timestamp for audio sync (no frame data!)
-        self.last_frame_timestamp = timestamp
+             # Store current frame reference for screen share display (not the data)
+             if source_type in ["video", "screen_share"] and frame is not None:
+                 self.current_screen_frame = frame.copy()
+                 
+             # Store only timestamp for audio sync (no frame data!)
+             self.last_frame_timestamp = timestamp
 
     def add_audio_samples(self, samples, participant_id="unknown", track_id=None, track_source=None):
         """
@@ -2419,7 +2419,7 @@ class FixedGoogleMeetRecorder:
                     
                     if bot_instance is None:
                         logger.error("❌ Bot instance not returned from recording thread!")
-                        return False, "Bot instance creation failed"
+                        return False, "Bot instance creation failed", None
                     
                     logger.info(f"✅ Bot instance retrieved for pause/resume")
                     
