@@ -2893,11 +2893,11 @@ class FixedGoogleMeetRecorder:
                 logger.error(f"⚠️ Pipeline trigger failed for {meeting_id}: {e}")
 
             # Clean up temp S3 folder
-            try:
-                logger.info(f"🧹 Deleting temp S3 folder: {s3_prefix}")
-                self._delete_s3_folder(s3_prefix)
-            except Exception as e:
-                logger.warning(f"⚠️ Could not delete temp folder: {e}")
+            #try:
+            #    logger.info(f"🧹 Deleting temp S3 folder: {s3_prefix}")
+            #    self._delete_s3_folder(s3_prefix)
+            #except Exception as e:
+            #    logger.warning(f"⚠️ Could not delete temp folder: {e}")
 
             # Update DB
             try:
