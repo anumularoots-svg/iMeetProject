@@ -1638,6 +1638,8 @@ class FixedRecordingBot:
                 self.stream_recorder.add_video_frame(
                     placeholder, "placeholder", timestamp_override=timestamp
                 )
+                # FIX: Also queue to frame processor for FFmpeg writing
+                self.stream_recorder.frame_processor.queue_raw_frame(placeholder, timestamp, "placeholder")
                 placeholder_count += 1
                 next_frame_time = current_time + PLACEHOLDER_INTERVAL
             
