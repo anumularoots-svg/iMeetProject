@@ -1239,7 +1239,7 @@ class StreamingRecordingWithChunks:
         self.sorted_frame_list = []
         
         for frame_obj in sorted_frames:
-            if frame_obj.source_type in ["video", "screen_share", "fast_duplicate"]:
+            if frame_obj.source_type in ["video", "screen_share", "fast_duplicate", "placeholder", "smooth_interpolated"]:
                 # Use high-precision indexing for fast lookup
                 frame_key = int(frame_obj.timestamp * 1000)  # 0.001s precision
                 
