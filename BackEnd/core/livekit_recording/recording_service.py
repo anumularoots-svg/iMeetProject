@@ -1008,7 +1008,7 @@ class StreamingRecordingWithChunks:
             try:
                 # Actually TEST GPU encoding, not just check if FFmpeg knows about it
                 test_cmd = [
-                    ffmpeg', '-y', '-f', 'lavfi', '-i', 'color=black:s=64x64:d=0.1',
+                    'ffmpeg', '-y', '-f', 'lavfi', '-i', 'color=black:s=64x64:d=0.1',
                     '-c:v', 'h264_nvenc', '-f', 'null', '-'
                 ]
                 result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
