@@ -2071,9 +2071,11 @@ class FixedGoogleMeetRecorder:
         self._global_lock = threading.RLock()
         
         self.thread_pool = ThreadPoolExecutor(max_workers=10, thread_name_prefix="FastRecorder")
-        
+        # ✅ START REDIS MONITOR FOR CROSS-POD STOP REQUESTS
+        if REDIS_AVAILABLE:
+            self._start_redis_monitor()
         logger.info(f"✅ FAST Google Meet Style Recorder initialized")
-
+    
     # =============================================================================
     # STEP 3: ADD THESE HELPER METHODS TO FixedGoogleMeetRecorder CLASS
     #         (Add after __init__ method, around line 2020)
@@ -2186,7 +2188,22 @@ class FixedGoogleMeetRecorder:
                         
         except Exception as e:
             logger.error(f"Error checking Redis stop requests: {e}")
-
+            
+    def _start_redis_monitor(self):
+        """Start background thread to monitor Redis for stop requests from other pods"""
+        def monitor_loop():
+            logger.info("🔄 Redis stop monitor thread running...")
+            while True:
+                try:
+                    self._check_redis_stop_requests()
+                except Exception as e:
+                    logger.error(f"Redis monitor error: {e}")
+                time.sleep(3)
+                
+        monitor_thread = threading.Thread(target=monitor_loop, daemon=True, name="RedisStopMonitor")
+        monitor_thread.start()
+        logger.info("✅ Redis stop monitor started for cross-pod requests")
+        
     def generate_recorder_token(self, room_name: str, recorder_identity: str) -> str:
         """Generate JWT token for recording bot - ONLY screen share and microphone"""
         try:
