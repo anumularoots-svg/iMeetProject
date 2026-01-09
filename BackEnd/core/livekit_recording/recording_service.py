@@ -1006,14 +1006,18 @@ class StreamingRecordingWithChunks:
             # Check GPU availability
             nvenc_available = False
             try:
-                check_nvenc = subprocess.run(
-                    ['ffmpeg', '-h', 'encoder=h264_nvenc'],
-                    capture_output=True, text=True, timeout=5
-                )
-                nvenc_available = (check_nvenc.returncode == 0)
-            except Exception:
+                # Actually TEST GPU encoding, not just check if FFmpeg knows about it
+                test_cmd = [
+                    ffmpeg', '-y', '-f', 'lavfi', '-i', 'color=black:s=64x64:d=0.1',
+                    '-c:v', 'h264_nvenc', '-f', 'null', '-'
+                ]
+                result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+                nvenc_available = (result.returncode == 0)
+                if nvenc_available:
+                    logger.info("🚀 GPU h264_nvenc encoding verified and available")
+            except Exception as e:
+                logger.info(f"⚙️ GPU not available, using CPU encoding: {e}")
                 nvenc_available = False
-            
             base_ffmpeg_cmd = [
                 'ffmpeg', '-y',
                 '-f', 'rawvideo',
