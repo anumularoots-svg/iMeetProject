@@ -639,6 +639,12 @@ class AggressiveFrameProcessor:
     def _convert_livekit_to_opencv(self, frame):
         """Optimized frame conversion"""
         try:
+            # ✅ FIX: Handle numpy arrays (placeholder frames) directly
+            if isinstance(frame, np.ndarray):
+                if len(frame.shape) == 3 and frame.shape[2] == 3:
+                    return frame  # Already BGR format
+                return None
+                
             if not frame or not hasattr(frame, 'width'):
                 return None
             
