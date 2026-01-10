@@ -849,7 +849,6 @@ class StreamingRecordingWithChunks:
         except Exception as e:
             logger.error(f"❌ Failed to trigger post-recording processing: {e}")
 
-           
     def add_video_frame(self, frame, source_type="video", timestamp_override=None):
         """Add video frame with STRICT timestamp-based filtering."""
         
@@ -874,28 +873,32 @@ class StreamingRecordingWithChunks:
             timestamp = time.perf_counter() - self.start_perf_counter
         
         with self.frame_lock:
-             # 🔥 FIX: Write directly to FFmpeg instead of storing in memory
-             if hasattr(self, 'ffmpeg_process') and self.ffmpeg_process and self.ffmpeg_process.poll() is None:
-                 try:
-                     write_frame = frame
-                     if frame.shape[:2] != (720, 1280):
-                         write_frame = cv2.resize(frame, (1280, 720))
-                     self.ffmpeg_process.stdin.write(write_frame.tobytes())
-                     self.frames_written = getattr(self, 'frames_written', 0) + 1
-
-                     # Log progress every 100 frames
-                     if self.frames_written % 100 == 0:
-                         logger.info(f"📹 Frames written to FFmpeg: {self.frames_written}")
-                 except Exception as e:
-                     logger.warning(f"FFmpeg write error: {e}")
-        
-             # Store current frame reference for screen share display (not the data)
-             if source_type in ["video", "screen_share"] and frame is not None:
-                 self.current_screen_frame = frame.copy()
-                 
-             # Store only timestamp for audio sync (no frame data!)
-             self.last_frame_timestamp = timestamp
-
+            # 🔥 FIX: Write directly to FFmpeg instead of storing in memory
+            if hasattr(self, 'ffmpeg_process') and self.ffmpeg_process and self.ffmpeg_process.poll() is None:
+                try:
+                    write_frame = frame
+                    if frame.shape[:2] != (720, 1280):
+                        write_frame = cv2.resize(frame, (1280, 720))
+                    self.ffmpeg_process.stdin.write(write_frame.tobytes())
+                    self.frames_written = getattr(self, 'frames_written', 0) + 1
+                    # Log progress every 100 frames
+                    if self.frames_written % 100 == 0:
+                        logger.info(f"📹 Frames written to FFmpeg: {self.frames_written}")
+                except Exception as e:
+                    logger.warning(f"FFmpeg write error: {e}")
+            
+            # ✅ ADD THIS - Track frame count for later
+            if not hasattr(self, 'total_frames_recorded'):
+                self.total_frames_recorded = 0
+            self.total_frames_recorded += 1
+            
+            # Store current frame reference for screen share display (not the data)
+            if source_type in ["video", "screen_share"] and frame is not None:
+                self.current_screen_frame = frame.copy()
+            
+            # Store only timestamp for audio sync (no frame data!)
+            self.last_frame_timestamp = timestamp
+            
     def add_audio_samples(self, samples, participant_id="unknown", track_id=None, track_source=None):
         """
         Add audio samples with STRICT timestamp-based filtering.
