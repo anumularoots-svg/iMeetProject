@@ -2909,324 +2909,244 @@ class FixedGoogleMeetRecorder:
                 }
 
     def _async_finalize_fast_recording(self, meeting_id: str, recording_info: dict):
-        """Run full S3/FFmpeg finalization with FAST PROCESSING"""
+        """Run full S3/FFmpeg finalization - FIXED VERSION with Audio"""
         try:
+            import os
+            import subprocess
+            import tempfile
+            
             recording_future = recording_info.get("recording_future")
+            bot_instance = recording_info.get("bot_instance")
+            
             if recording_future:
                 logger.info(f"🎬 FAST background finalization started for {meeting_id}")
-                recording_future.result()
+                try:
+                    recording_future.result(timeout=120)
+                except Exception as e:
+                    logger.warning(f"⚠️ Recording future error: {e}")
                 logger.info(f"✅ FAST background finalization done for {meeting_id}")
-            else:
-                logger.warning(f"⚠️ No recording_future found for {meeting_id}")
-
-            s3_prefix = f"{S3_FOLDERS['recordings_temp']}/{meeting_id}"
-            raw_video_s3_key = f"{s3_prefix}/raw_video_{meeting_id}.avi"
-            raw_audio_s3_key = f"{s3_prefix}/raw_audio_{meeting_id}.wav"
-
-            # Create final MP4 with FAST DUPLICATION
-            final_video_s3_key = self._create_final_video_fast_duplication(
-                raw_video_s3_key, raw_audio_s3_key, meeting_id
-            )
-
-            if not final_video_s3_key:
-                logger.error(f"❌ Failed to create final FAST video for {meeting_id}")
+            
+            # ✅ STEP 1: Get temp video file from bot
+            temp_video_path = None
+            stream_recorder = None
+            
+            if bot_instance and hasattr(bot_instance, 'stream_recorder'):
+                stream_recorder = bot_instance.stream_recorder
+                temp_video_path = stream_recorder.temp_video_path
+                logger.info(f"📁 Temp video path: {temp_video_path}")
+            
+            if not temp_video_path or not os.path.exists(temp_video_path):
+                logger.error(f"❌ Temp video file not found")
+                self._cleanup_recording(meeting_id)
                 return
-
-            # Trigger pipeline
-            processing_result = None
-            try:
-                processing_result = self._trigger_processing_pipeline(
-                    final_video_s3_key, meeting_id,
-                    recording_info.get("host_user_id"),
-                    recording_info.get("recording_doc_id")
-                )
-                logger.info(f"✅ Triggered processing pipeline for {meeting_id}")
-            except Exception as e:
-                logger.error(f"⚠️ Pipeline trigger failed for {meeting_id}: {e}")
-
-            # Clean up temp S3 folder
-            #try:
-            #    logger.info(f"🧹 Deleting temp S3 folder: {s3_prefix}")
-            #    self._delete_s3_folder(s3_prefix)
-            #except Exception as e:
-            #    logger.warning(f"⚠️ Could not delete temp folder: {e}")
-
-            # Update DB
-            try:
-                self.collection.update_one(
-                    {"_id": recording_info.get("recording_doc_id")},
-                    {"$set": {
-                        "recording_status": "completed",
-                        "completed_at": datetime.now(),
-                        "file_path": final_video_s3_key,
-                        "processing_result": processing_result,
-                        "video_type": "fast_smooth_duplicated"
-                    }}
-                )
-                logger.info(f"✅ DB updated for FAST video {meeting_id}")
-            except Exception as db_err:
-                logger.warning(f"⚠️ DB update failed: {db_err}")
-
-            # ==========================================================
-            # ✅ ADD CLEANUP **HERE**
-            # ==========================================================
-
-            # Clean up Redis
-            self._delete_recording_from_redis(meeting_id)
-
-            # Clean up local memory
-            with self._global_lock:
-                if meeting_id in self.active_recordings:
-                    del self.active_recordings[meeting_id]
-
-            logger.info(f"🧼 FAST recording cleanup completed for {meeting_id}")
-
-        except Exception as e:
-            logger.error(f"❌ FAST background finalization failed for {meeting_id}: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-
-    def _create_final_video_fast_duplication(self, video_s3_key: str, audio_s3_key: Optional[str] = None, 
-                      meeting_id: Optional[str] = None) -> Optional[str]:
-        """
-        Create final MP4 with FAST FRAME DUPLICATION (no motion interpolation)
-        """
-        temp_video_file = None
-        temp_audio_file = None
-        temp_final_file = None
-        
-        try:
-            import tempfile
-            import subprocess
             
-            final_output_key = video_s3_key.replace('.avi', '_fast_final.mp4')
+            video_size = os.path.getsize(temp_video_path)
+            if video_size == 0:
+                logger.error(f"❌ Temp video file is empty")
+                self._cleanup_recording(meeting_id)
+                return
             
-            logger.info(f"🎬 Creating FAST SMOOTH video with SIMPLE DUPLICATION")
+            logger.info(f"📊 Video file: {video_size:,} bytes")
             
-            # Create temp files
-            temp_video_fd, temp_video_file = tempfile.mkstemp(suffix='.avi', prefix='raw_video_')
-            os.close(temp_video_fd)
+            # ✅ STEP 2: Generate audio file from captured data
+            temp_audio_path = None
+            has_audio = False
             
-            temp_audio_fd, temp_audio_file = tempfile.mkstemp(suffix='.wav', prefix='raw_audio_')
-            os.close(temp_audio_fd)
+            if stream_recorder and stream_recorder.raw_audio_data:
+                logger.info(f"🎵 Processing {len(stream_recorder.raw_audio_data)} audio chunks...")
+                
+                try:
+                    import wave
+                    import numpy as np
+                    
+                    temp_audio_fd, temp_audio_path = tempfile.mkstemp(suffix='.wav', prefix=f'audio_{meeting_id}_')
+                    os.close(temp_audio_fd)
+                    
+                    sample_rate = 48000
+                    frames_written = getattr(stream_recorder, 'frames_written', 0)
+                    duration = max(frames_written / 20.0, 5.0)
+                    
+                    total_samples = int(duration * sample_rate * 2)
+                    final_audio = np.zeros(total_samples, dtype=np.float64)
+                    
+                    for audio_chunk in stream_recorder.raw_audio_data:
+                        timestamp = audio_chunk.get('timestamp', 0)
+                        samples = audio_chunk.get('samples', [])
+                        
+                        if not samples:
+                            continue
+                        
+                        start_sample = int(timestamp * sample_rate * 2)
+                        if start_sample < 0 or start_sample >= total_samples:
+                            continue
+                        
+                        audio_data = np.array(samples, dtype=np.float64)
+                        end_sample = min(start_sample + len(audio_data), total_samples)
+                        audio_length = end_sample - start_sample
+                        
+                        if audio_length > 0:
+                            final_audio[start_sample:end_sample] += audio_data[:audio_length]
+                    
+                    max_val = np.max(np.abs(final_audio))
+                    if max_val > 0:
+                        final_audio = final_audio * (32000.0 / max_val)
+                    
+                    final_audio_int16 = np.clip(final_audio, -32768, 32767).astype(np.int16)
+                    
+                    with wave.open(temp_audio_path, 'wb') as wav_file:
+                        wav_file.setnchannels(2)
+                        wav_file.setsampwidth(2)
+                        wav_file.setframerate(sample_rate)
+                        wav_file.writeframes(final_audio_int16.tobytes())
+                    
+                    audio_size = os.path.getsize(temp_audio_path)
+                    logger.info(f"✅ Audio file created: {audio_size:,} bytes")
+                    has_audio = audio_size > 1000
+                    
+                except Exception as audio_err:
+                    logger.error(f"❌ Audio generation failed: {audio_err}")
+                    has_audio = False
+            else:
+                logger.warning(f"⚠️ No audio data captured")
             
-            temp_final_fd, temp_final_file = tempfile.mkstemp(suffix='.mp4', prefix='fast_final_')
+            # ✅ STEP 3: Merge video + audio into MP4
+            temp_final_fd, temp_final_path = tempfile.mkstemp(suffix='.mp4', prefix=f'final_{meeting_id}_')
             os.close(temp_final_fd)
             
-            # Download from S3
-            logger.info(f"📥 Downloading from S3...")
             try:
-                s3_client.download_file(AWS_S3_BUCKET, video_s3_key, temp_video_file)
-                video_size = os.path.getsize(temp_video_file)
-                logger.info(f"✅ Video: {video_size:,} bytes")
-                
-                s3_client.download_file(AWS_S3_BUCKET, audio_s3_key, temp_audio_file)
-                audio_size = os.path.getsize(temp_audio_file)
-                logger.info(f"✅ Audio: {audio_size:,} bytes")
-            except Exception as e:
-                logger.error(f"❌ S3 download failed: {e}")
-                return None
-            
-            # Simple target FPS - no complex interpolation
-            target_fps = 24  # Standard smooth playback FPS
-            
-            logger.info(f"🎬 Target: {target_fps} FPS (FAST PROCESSING - no interpolation)")
-            
-            # Check GPU availability
-            nvenc_available = False
-            try:
-                result = subprocess.run(
-                    ['ffmpeg', '-hide_banner', '-encoders'],
-                    capture_output=True, text=True, timeout=5
-                )
-                nvenc_available = 'h264_nvenc' in result.stdout
-            except:
-                pass
-            
-            # Check for advanced smoothing environment variable
-            use_advanced_smoothing = os.getenv("USE_ADVANCED_SMOOTHING", "false").lower() == "true"
-            
-            success = False
-            
-            # FAST GPU encoding with optional advanced smoothing
-            if nvenc_available:
-                if use_advanced_smoothing:
-                    logger.info(f"🚀 GPU ADVANCED SMOOTHING @ {target_fps} FPS...")
-                    # Use fast minterpolate settings
-                    video_filter = f'minterpolate=fps={target_fps}:mi_mode=blend'
+                if has_audio and temp_audio_path:
+                    logger.info(f"🎬 Merging video + audio into MP4...")
+                    merge_cmd = [
+                        'ffmpeg', '-y',
+                        '-i', temp_video_path,
+                        '-i', temp_audio_path,
+                        '-c:v', 'libx264',
+                        '-preset', 'fast',
+                        '-crf', '23',
+                        '-c:a', 'aac',
+                        '-b:a', '192k',
+                        '-ar', '48000',
+                        '-ac', '2',
+                        '-movflags', '+faststart',
+                        '-shortest',
+                        temp_final_path
+                    ]
                 else:
-                    logger.info(f"🚀 GPU FAST ENCODING @ {target_fps} FPS...")
-                    # Use simple fps conversion
-                    video_filter = f'fps={target_fps}'
+                    logger.info(f"🎬 Converting video to MP4 (no audio)...")
+                    merge_cmd = [
+                        'ffmpeg', '-y',
+                        '-i', temp_video_path,
+                        '-c:v', 'libx264',
+                        '-preset', 'fast',
+                        '-crf', '23',
+                        '-movflags', '+faststart',
+                        temp_final_path
+                    ]
                 
-                ffmpeg_cmd_gpu = [
-                    'ffmpeg', '-y',
-                    '-i', temp_video_file,
-                    '-i', temp_audio_file,
-                    # SMOOTH frame rate conversion with proper FFmpeg syntax
-                    '-c:v', 'h264_nvenc',
-                    '-preset', 'p4',  # Good quality, faster than p6
-                    '-tune', 'hq',
-                    '-profile:v', 'high',
-                    '-level', '4.2',
-                    '-rc', 'vbr',
-                    '-cq', '20',      # Good quality
-                    '-b:v', '5M',     # Good bitrate
-                    '-maxrate', '8M',
-                    '-bufsize', '16M',
-                    '-pix_fmt', 'yuv420p',
-                    # Use the selected video filter
-                    '-filter:v', video_filter,
-                    '-fps_mode', 'cfr',  # Constant frame rate
-                    '-g', str(target_fps),  # 1 second GOP for smooth seeking
-                    '-bf', '3',
-                    '-refs', '3',
-                    # Audio
-                    '-c:a', 'aac',
-                    '-b:a', '192k',
-                    '-ar', '48000',
-                    '-ac', '2',
-                    '-af', 'asetpts=PTS-STARTPTS',
-                    # Container
-                    '-movflags', '+faststart',
-                    '-max_interleave_delta', '0',
-                    temp_final_file
-                ]
+                result = subprocess.run(merge_cmd, capture_output=True, text=True, timeout=600)
                 
-                ffmpeg_env = os.environ.copy()
-                ffmpeg_env['CUDA_VISIBLE_DEVICES'] = '0'
-                
-                result = subprocess.run(
-                    ffmpeg_cmd_gpu,
-                    capture_output=True,
-                    text=True,
-                    env=ffmpeg_env,
-                    timeout=None
-                )
-                
-                if result.returncode == 0 and os.path.exists(temp_final_file) and os.path.getsize(temp_final_file) > 0:
-                    logger.info(f"✅ GPU FAST ENCODING successful @ {target_fps} FPS")
-                    success = True
+                if result.returncode != 0:
+                    logger.error(f"❌ FFmpeg merge failed: {result.stderr[-500:]}")
+                    temp_final_path = temp_video_path
                 else:
-                    logger.warning(f"⚠️ GPU encoding failed, trying CPU...")
-                    logger.warning(f"GPU error: {result.stderr[-500:]}")
-                    if os.path.exists(temp_final_file):
-                        os.remove(temp_final_file)
-                        temp_final_fd, temp_final_file = tempfile.mkstemp(suffix='.mp4', prefix='fast_final_')
-                        os.close(temp_final_fd)
+                    logger.info(f"✅ MP4 created successfully")
+                    
+            except subprocess.TimeoutExpired:
+                logger.error(f"❌ FFmpeg merge timeout")
+                temp_final_path = temp_video_path
+            except Exception as merge_err:
+                logger.error(f"❌ Merge error: {merge_err}")
+                temp_final_path = temp_video_path
             
-            # CPU FALLBACK - fast encoding with same smoothing options
-            if not success:
-                if use_advanced_smoothing:
-                    logger.info(f"⚙️ CPU ADVANCED SMOOTHING @ {target_fps} FPS...")
-                    video_filter = f'minterpolate=fps={target_fps}:mi_mode=blend'
-                else:
-                    logger.info(f"⚙️ CPU FAST ENCODING @ {target_fps} FPS...")
-                    video_filter = f'fps={target_fps}'
-                
-                ffmpeg_cmd_cpu = [
-                    'ffmpeg', '-y',
-                    '-i', temp_video_file,
-                    '-i', temp_audio_file,
-                    # SMOOTH frame rate conversion with proper FFmpeg syntax
-                    '-c:v', 'libx264',
-                    '-preset', 'medium',  # Balanced speed/quality
-                    '-tune', 'film',
-                    '-profile:v', 'high',
-                    '-level', '4.2',
-                    '-crf', '20',       # Good quality
-                    '-pix_fmt', 'yuv420p',
-                    # Use the selected video filter
-                    '-filter:v', video_filter,
-                    '-fps_mode', 'cfr',  # Constant frame rate
-                    '-g', str(target_fps),  # 1 second GOP
-                    '-bf', '3',
-                    '-refs', '3',
-                    # Audio
-                    '-c:a', 'aac',
-                    '-b:a', '192k',
-                    '-ar', '48000',
-                    '-ac', '2',
-                    '-af', 'asetpts=PTS-STARTPTS',
-                    # Container
-                    '-movflags', '+faststart',
-                    '-max_interleave_delta', '0',
-                    temp_final_file
-                ]
-                
-                result = subprocess.run(
-                    ffmpeg_cmd_cpu,
-                    capture_output=True,
-                    text=True,
-                    timeout=None
-                )
-                
-                if result.returncode == 0 and os.path.exists(temp_final_file) and os.path.getsize(temp_final_file) > 0:
-                    logger.info(f"✅ CPU FAST ENCODING successful @ {target_fps} FPS")
-                    success = True
-                else:
-                    logger.error(f"❌ CPU encoding also failed")
-                    logger.error(f"Error: {result.stderr[-1000:]}")
-                    return None
-            
-            # Verify final file
-            if not success or not os.path.exists(temp_final_file):
-                logger.error(f"❌ FAST ENCODING failed - no output file")
-                return None
-            
-            final_size = os.path.getsize(temp_final_file)
+            # ✅ STEP 4: Upload to S3
+            final_size = os.path.getsize(temp_final_path)
             if final_size == 0:
-                logger.error(f"❌ Output file is empty")
-                return None
+                logger.error(f"❌ Final file is empty")
+                self._cleanup_recording(meeting_id)
+                return
             
-            logger.info(f"✅ FAST final video: {final_size:,} bytes @ {target_fps} FPS")
+            file_ext = '.mp4' if temp_final_path.endswith('.mp4') else '.avi'
+            final_s3_key = f"videos/{meeting_id}_recording{file_ext}"
             
-            # Upload to S3
-            logger.info(f"📤 Uploading FAST video to S3: {final_output_key}")
+            logger.info(f"📤 Uploading to S3: {final_s3_key} ({final_size:,} bytes)")
+            
             try:
-                with open(temp_final_file, 'rb') as f:
-                    s3_client.upload_fileobj(f, AWS_S3_BUCKET, final_output_key)
-                logger.info(f"✅ FAST video uploaded successfully")
-            except Exception as e:
-                logger.error(f"❌ Upload failed: {e}")
-                return None
+                s3_client.upload_file(temp_final_path, AWS_S3_BUCKET, final_s3_key)
+                logger.info(f"✅ Uploaded to S3: s3://{AWS_S3_BUCKET}/{final_s3_key}")
+            except Exception as upload_err:
+                logger.error(f"❌ S3 upload failed: {upload_err}")
+                self._cleanup_recording(meeting_id)
+                return
             
-            # Verify upload
-            try:
-                response = s3_client.head_object(Bucket=AWS_S3_BUCKET, Key=final_output_key)
-                s3_size = response['ContentLength']
-                logger.info(f"✅ FAST video verified in S3: {s3_size:,} bytes @ {target_fps} FPS")
-            except Exception as e:
-                logger.error(f"❌ Verification failed: {e}")
-                return None
-            
-            # Clean up intermediate S3 files
-            logger.info("🧹 Cleaning up intermediate files...")
-            try:
-                s3_client.delete_object(Bucket=AWS_S3_BUCKET, Key=video_s3_key)
-                s3_client.delete_object(Bucket=AWS_S3_BUCKET, Key=audio_s3_key)
-                logger.info("✅ Intermediate files deleted")
-            except Exception as e:
-                logger.warning(f"⚠️ Cleanup warning: {e}")
-            
-            return final_output_key
-        
-        except Exception as e:
-            logger.error(f"❌ Error creating FAST video: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return None
-        
-        finally:
-            # Clean up temp files
-            for temp_file in [temp_video_file, temp_audio_file, temp_final_file]:
+            # ✅ STEP 5: Cleanup temp files
+            for temp_file in [temp_video_path, temp_audio_path]:
                 try:
                     if temp_file and os.path.exists(temp_file):
                         os.remove(temp_file)
-                        logger.debug(f"Deleted temp file: {temp_file}")
-                except Exception as e:
-                    logger.debug(f"Could not delete {temp_file}: {e}")
-
+                        logger.info(f"🧹 Deleted: {temp_file}")
+                except:
+                    pass
+            
+            if temp_final_path != temp_video_path:
+                try:
+                    if os.path.exists(temp_final_path):
+                        os.remove(temp_final_path)
+                except:
+                    pass
+            
+            # ✅ STEP 6: Update database
+            try:
+                self.collection.update_one(
+                    {"meeting_id": meeting_id},
+                    {"$set": {
+                        "recording_status": "completed",
+                        "completed_at": datetime.now(),
+                        "file_path": final_s3_key,
+                        "file_size": final_size,
+                        "has_audio": has_audio,
+                        "s3_bucket": AWS_S3_BUCKET,
+                        "s3_url": f"s3://{AWS_S3_BUCKET}/{final_s3_key}"
+                    }}
+                )
+                logger.info(f"✅ Database updated for {meeting_id}")
+            except Exception as db_err:
+                logger.warning(f"⚠️ DB update failed: {db_err}")
+            
+            # ✅ STEP 7: Trigger processing pipeline
+            try:
+                self._trigger_processing_pipeline(
+                    final_s3_key, meeting_id,
+                    recording_info.get("host_user_id"),
+                    recording_info.get("recording_doc_id")
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ Processing pipeline failed: {e}")
+            
+            # ✅ STEP 8: Final cleanup
+            self._cleanup_recording(meeting_id)
+            
+            logger.info(f"🎉 Recording COMPLETE for {meeting_id}")
+            logger.info(f"   📹 Video: {video_size:,} bytes")
+            logger.info(f"   🎵 Audio: {'Yes' if has_audio else 'No'}")
+            logger.info(f"   📦 Final: {final_size:,} bytes")
+            logger.info(f"   ☁️  S3: {final_s3_key}")
+            
+        except Exception as e:
+            logger.error(f"❌ Finalization failed for {meeting_id}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            self._cleanup_recording(meeting_id)
+            
+    def _cleanup_recording(self, meeting_id: str):
+        """Helper to cleanup recording state"""
+        try:
+            self._delete_recording_from_redis(meeting_id)
+            with self._global_lock:
+                if meeting_id in self.active_recordings:
+                    del self.active_recordings[meeting_id]
+        except:
+            pass
+            
     def _detect_video_fps(self, video_file_path: str) -> float:
         """Detect FPS from video file using ffprobe"""
         try:
