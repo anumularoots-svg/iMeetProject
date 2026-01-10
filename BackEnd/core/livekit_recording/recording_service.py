@@ -1775,14 +1775,13 @@ class FixedRecordingBot:
                 
                 if not is_screen_share:
                     try:
-                        if hasattr(track, 'source'):
-                            source_str = str(track.source).lower()
-                            if 'camera' not in source_str:
-                                is_screen_share = True
-                                logger.info(f"✅ Detected screen share - source: {source_str}")
+                       if hasattr(publication, 'source'):
+                           if publication.source == 3:  # SOURCE_SCREENSHARE = 3
+                               is_screen_share = True
+                               logger.info(f"✅ Detected screen share - source enum: {publication.source}")
                     except Exception as e:
                         logger.debug(f"Source check failed: {e}")
-                
+
                 if not is_screen_share:
                     logger.warning(f"⛔ REJECTING camera/unknown video from {participant.identity}")
                     self.stream_recorder.processing_tracks.discard(track.sid)
