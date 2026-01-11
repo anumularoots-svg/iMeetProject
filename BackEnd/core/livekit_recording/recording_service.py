@@ -2069,34 +2069,35 @@ class FixedRecordingBot:
         """Handle room disconnection"""
         logger.warning(f"⚠️ Room disconnected: {reason}")
 
-    async def _finalize(self):
-        """Finalize recording and generate FAST output"""
-        try:
-            logger.info("Finalizing FAST recording...")
-            
-            for task in list(self.active_video_streams.values()):
-                task.cancel()
-            for task in list(self.active_audio_streams.values()):
-                task.cancel()
-            
-            await asyncio.sleep(1.0)
-            
-            # Generate FAST video
-            video_path, audio_path = self.stream_recorder.generate_synchronized_video()
-            
-            self.final_video_path = video_path
-            self.final_audio_path = audio_path
-            
-            if self.room and self.is_connected:
-                try:
-                    await asyncio.wait_for(self.room.disconnect(), timeout=30.0)
-                except:
-                    pass
-            
-            logger.info("FAST recording finalized successfully")
-            
-        except Exception as e:
-            logger.error(f"Finalization error: {e}")
+async def _finalize(self):
+    """Finalize recording and generate FAST output"""
+    try:
+        logger.info("Finalizing FAST recording...")
+        
+        for task in list(self.active_video_streams.values()):
+            task.cancel()
+        for task in list(self.active_audio_streams.values()):
+            task.cancel()
+        
+        await asyncio.sleep(1.0)
+        
+        # ✅ FIX: Stop recording (closes FFmpeg) - video is already created
+        self.stream_recorder.stop_recording()
+        
+        # ✅ FIX: Set paths from stream_recorder (video already exists)
+        self.final_video_path = self.stream_recorder.temp_video_path
+        self.final_audio_path = None  # Audio handled in finalization
+        
+        if self.room and self.is_connected:
+            try:
+                await asyncio.wait_for(self.room.disconnect(), timeout=30.0)
+            except:
+                pass
+        
+        logger.info("FAST recording finalized successfully")
+        
+    except Exception as e:
+        logger.error(f"Finalization error: {e}")
 
 class FixedGoogleMeetRecorder:
     """Fixed Google Meet style recorder with FAST PLAYBACK"""
