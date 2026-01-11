@@ -540,7 +540,7 @@ class ProductionLiveKitService:
                 
                 admin_token = self.generate_admin_token()
                 
-                url = f"{self.config['url']}/twirp/livekit.RoomService/CreateRoom"
+                url = f"{self.config['api_url']}/twirp/livekit.RoomService/CreateRoom"
                 
                 headers = {
                     'Authorization': f'Bearer {admin_token}',
@@ -612,7 +612,7 @@ class ProductionLiveKitService:
                 
                 admin_token = self.generate_admin_token()
                 
-                url = f"{self.config['url']}/twirp/livekit.RoomService/ListRooms"
+                url = f"{self.config['api_url']}/twirp/livekit.RoomService/ListRooms"
                 
                 headers = {
                     'Authorization': f'Bearer {admin_token}',
@@ -748,7 +748,7 @@ class ProductionLiveKitService:
                 
                 admin_token = self.generate_admin_token()
                 
-                url = f"{self.config['url']}/twirp/livekit.RoomService/RemoveParticipant"
+                url = f"{self.config['api_url']}/twirp/livekit.RoomService/RemoveParticipant"
                 
                 headers = {
                     'Authorization': f'Bearer {admin_token}',
@@ -805,7 +805,7 @@ class ProductionLiveKitService:
                 
                 admin_token = self.generate_admin_token()
                 
-                url = f"{self.config['url']}/twirp/livekit.RoomService/DeleteRoom"
+                url = f"{self.config['api_url']}/twirp/livekit.RoomService/DeleteRoom"
                 
                 headers = {
                     'Authorization': f'Bearer {admin_token}',
@@ -983,7 +983,7 @@ class ProductionLiveKitService:
             
             admin_token = self.generate_admin_token()
             
-            url = f"{self.config['url']}/twirp/livekit.RoomService/MutePublishedTrack"
+            url = f"{self.config['api_url']}/twirp/livekit.RoomService/MutePublishedTrack"
             
             headers = {
                 'Authorization': f'Bearer {admin_token}',
