@@ -133,7 +133,7 @@ logging.basicConfig(filename=LOG_FILE_PATH, level=LOG_LEVEL, format=LOG_FORMAT)
 # LiveKit Configuration
 LIVEKIT_CONFIG = {
     'url': os.getenv("LIVEKIT_URL"),
-    'api_key': os.getenv("LIVEKIT_API_KEY"),
+    'api_url': os.getenv("LIVEKIT_URL", "").replace('wss://', 'https://').replace('ws://', 'http://'),
     'api_secret': os.getenv("LIVEKIT_API_SECRET"),
     'ttl': int(os.getenv("LIVEKIT_TTL", 3600))
 }
