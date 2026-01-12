@@ -635,96 +635,129 @@ class AggressiveFrameProcessor:
             
         except Exception:
             return base_frame.copy()  # Fallback to original
-    
-    def _convert_livekit_to_opencv(self, frame):
-        """Optimized frame conversion with I420/YUV support"""
+def _convert_livekit_to_opencv(self, frame):
+    """Optimized frame conversion with I420/YUV support using get_plane()"""
+    try:
+        # Handle numpy arrays (placeholder frames) directly
+        if isinstance(frame, np.ndarray):
+            if len(frame.shape) == 3 and frame.shape[2] == 3:
+                return frame  # Already BGR format
+            return None
+
+        if not frame or not hasattr(frame, 'width'):
+            return None
+
+        width, height = frame.width, frame.height
+
+        # Check native frame type first
+        native_type = frame.type if hasattr(frame, 'type') else None
+
+        # Method 1: Handle I420 directly using get_plane() (most common from LiveKit)
+        if native_type == rtc.VideoBufferType.I420 or native_type == 5:
+            try:
+                # I420 has 3 planes - Y, U, V stored separately
+                y_plane = frame.get_plane(0)
+                u_plane = frame.get_plane(1)
+                v_plane = frame.get_plane(2)
+                
+                if y_plane is not None and u_plane is not None and v_plane is not None:
+                    y_data = bytes(y_plane)
+                    u_data = bytes(u_plane)
+                    v_data = bytes(v_plane)
+                    
+                    # Combine planes into single I420 buffer (Y + U + V)
+                    i420_data = y_data + u_data + v_data
+                    expected_size = int(height * width * 1.5)
+                    
+                    if len(i420_data) >= expected_size:
+                        yuv_array = np.frombuffer(i420_data, dtype=np.uint8)[:expected_size]
+                        yuv_array = yuv_array.reshape((int(height * 1.5), width))
+                        bgr_frame = cv2.cvtColor(yuv_array, cv2.COLOR_YUV2BGR_I420)
+                        return bgr_frame
+                
+                # Fallback: try frame.data directly (might work for some LiveKit versions)
+                i420_data = frame.data
+                if i420_data is not None:
+                    i420_bytes = bytes(i420_data) if isinstance(i420_data, memoryview) else i420_data
+                    expected_size = int(height * width * 1.5)
+                    if len(i420_bytes) >= expected_size:
+                        yuv_array = np.frombuffer(i420_bytes, dtype=np.uint8)[:expected_size]
+                        yuv_array = yuv_array.reshape((int(height * 1.5), width))
+                        bgr_frame = cv2.cvtColor(yuv_array, cv2.COLOR_YUV2BGR_I420)
+                        return bgr_frame
+                        
+            except Exception as e:
+                logger.info(f"I420 direct conversion failed: {e}")
+
+        # Method 2: Try ARGB conversion
         try:
-            # Handle numpy arrays (placeholder frames) directly
-            if isinstance(frame, np.ndarray):
-                if len(frame.shape) == 3 and frame.shape[2] == 3:
-                    return frame  # Already BGR format
-                return None
-
-            if not frame or not hasattr(frame, 'width'):
-                return None
-
-            width, height = frame.width, frame.height
-
-            # Check native frame type first
-            native_type = frame.type if hasattr(frame, 'type') else None
-
-            # Method 1: Handle I420 directly (most common from LiveKit)
-            if native_type == rtc.VideoBufferType.I420 or native_type == 5:
-                try:
-                    i420_data = frame.data
-                    expected_size = int(height * width * 1.5)
-                    if len(i420_data) >= expected_size:
-                        yuv_array = np.frombuffer(i420_data, dtype=np.uint8)[:expected_size]
-                        yuv_array = yuv_array.reshape((int(height * 1.5), width))
-                        bgr_frame = cv2.cvtColor(yuv_array, cv2.COLOR_YUV2BGR_I420)
-                        return bgr_frame
-                except Exception as e:
-                    logger.debug(f"I420 direct conversion failed: {e}")
-
-            # Method 2: Try ARGB conversion
-            try:
-                argb_frame = frame.convert(rtc.VideoBufferType.ARGB)
-                if argb_frame and argb_frame.data:
-                    argb_data = bytes(argb_frame.data) if isinstance(argb_frame.data, memoryview) else argb_frame.data
-                    expected_size = height * width * 4
-                    if len(argb_data) >= expected_size:
-                        argb_array = np.frombuffer(argb_data, dtype=np.uint8)[:expected_size]
-                        argb_array = argb_array.reshape((height, width, 4))
-                        return cv2.cvtColor(argb_array, cv2.COLOR_BGRA2BGR)
-            except Exception as e:
-                logger.debug(f"ARGB conversion failed: {e}")
-
-            # Method 3: Try RGBA conversion
-            try:
-                rgba_frame = frame.convert(rtc.VideoBufferType.RGBA)
-                if rgba_frame and rgba_frame.data:
-                    rgba_data = bytes(rgba_frame.data) if isinstance(rgba_frame.data, memoryview) else rgba_frame.data
-                    expected_size = height * width * 4
-                    if len(rgba_data) >= expected_size:
-                        rgba_array = np.frombuffer(rgba_data, dtype=np.uint8)[:expected_size]
-                        rgba_array = rgba_array.reshape((height, width, 4))
-                        return cv2.cvtColor(rgba_array, cv2.COLOR_RGBA2BGR)
-            except Exception as e:
-                logger.debug(f"RGBA conversion failed: {e}")
-
-            # Method 4: Try RGB24 conversion
-            try:
-                rgb_frame = frame.convert(rtc.VideoBufferType.RGB24)
-                if rgb_frame and rgb_frame.data:
-                    rgb_data = bytes(rgb_frame.data) if isinstance(rgb_frame.data, memoryview) else rgb_frame.data
-                    expected_size = height * width * 3
-                    if len(rgb_data) >= expected_size:
-                        rgb_array = np.frombuffer(rgb_data, dtype=np.uint8)[:expected_size]
-                        rgb_array = rgb_array.reshape((height, width, 3))
-                        return cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
-            except Exception as e:
-                logger.debug(f"RGB24 conversion failed: {e}")
-
-            # Method 5: Last resort - convert to I420 then to BGR
-            try:
-                i420_frame = frame.convert(rtc.VideoBufferType.I420)
-                if i420_frame and i420_frame.data:
-                    i420_data = bytes(i420_frame.data) if isinstance(i420_frame.data, memoryview) else i420_frame.data
-                    expected_size = int(height * width * 1.5)
-                    if len(i420_data) >= expected_size:
-                        yuv_array = np.frombuffer(i420_data, dtype=np.uint8)[:expected_size]
-                        yuv_array = yuv_array.reshape((int(height * 1.5), width))
-                        bgr_frame = cv2.cvtColor(yuv_array, cv2.COLOR_YUV2BGR_I420)
-                        return bgr_frame
-            except Exception as e:
-                logger.debug(f"I420 conversion failed: {e}")
-
-            logger.warning(f"All frame conversions failed for {width}x{height}, type={native_type}")
-            return None
-
+            argb_frame = frame.convert(rtc.VideoBufferType.ARGB)
+            if argb_frame and argb_frame.data:
+                argb_data = bytes(argb_frame.data) if isinstance(argb_frame.data, memoryview) else argb_frame.data
+                expected_size = height * width * 4
+                if len(argb_data) >= expected_size:
+                    argb_array = np.frombuffer(argb_data, dtype=np.uint8)[:expected_size]
+                    argb_array = argb_array.reshape((height, width, 4))
+                    return cv2.cvtColor(argb_array, cv2.COLOR_BGRA2BGR)
         except Exception as e:
-            logger.error(f"Frame conversion error: {e}")
-            return None
+            logger.debug(f"ARGB conversion failed: {e}")
+
+        # Method 3: Try RGBA conversion
+        try:
+            rgba_frame = frame.convert(rtc.VideoBufferType.RGBA)
+            if rgba_frame and rgba_frame.data:
+                rgba_data = bytes(rgba_frame.data) if isinstance(rgba_frame.data, memoryview) else rgba_frame.data
+                expected_size = height * width * 4
+                if len(rgba_data) >= expected_size:
+                    rgba_array = np.frombuffer(rgba_data, dtype=np.uint8)[:expected_size]
+                    rgba_array = rgba_array.reshape((height, width, 4))
+                    return cv2.cvtColor(rgba_array, cv2.COLOR_RGBA2BGR)
+        except Exception as e:
+            logger.debug(f"RGBA conversion failed: {e}")
+
+        # Method 4: Try RGB24 conversion
+        try:
+            rgb_frame = frame.convert(rtc.VideoBufferType.RGB24)
+            if rgb_frame and rgb_frame.data:
+                rgb_data = bytes(rgb_frame.data) if isinstance(rgb_frame.data, memoryview) else rgb_frame.data
+                expected_size = height * width * 3
+                if len(rgb_data) >= expected_size:
+                    rgb_array = np.frombuffer(rgb_data, dtype=np.uint8)[:expected_size]
+                    rgb_array = rgb_array.reshape((height, width, 3))
+                    return cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            logger.debug(f"RGB24 conversion failed: {e}")
+
+        # Method 5: Convert to I420 then use get_plane()
+        try:
+            i420_frame = frame.convert(rtc.VideoBufferType.I420)
+            if i420_frame:
+                y_plane = i420_frame.get_plane(0)
+                u_plane = i420_frame.get_plane(1)
+                v_plane = i420_frame.get_plane(2)
+                
+                if y_plane is not None and u_plane is not None and v_plane is not None:
+                    y_data = bytes(y_plane)
+                    u_data = bytes(u_plane)
+                    v_data = bytes(v_plane)
+                    i420_data = y_data + u_data + v_data
+                    expected_size = int(height * width * 1.5)
+                    
+                    if len(i420_data) >= expected_size:
+                        yuv_array = np.frombuffer(i420_data, dtype=np.uint8)[:expected_size]
+                        yuv_array = yuv_array.reshape((int(height * 1.5), width))
+                        bgr_frame = cv2.cvtColor(yuv_array, cv2.COLOR_YUV2BGR_I420)
+                        return bgr_frame
+        except Exception as e:
+            logger.debug(f"I420 convert+plane failed: {e}")
+
+        # All methods failed
+        logger.warning(f"All frame conversion methods failed for {width}x{height} frame, type={native_type}")
+        return None
+
+    except Exception as e:
+        logger.debug(f"Frame conversion error: {e}")
+        return None
 
 class StreamingRecordingWithChunks:
     """Recording with streaming chunk uploads to S3 and FAST VIDEO"""
